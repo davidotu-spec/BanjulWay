@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "70054013320",
+    "project_id": "banjulway",
+    "storage_bucket": "banjulway.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:70054013320:android:1ae187793aa190d08f323d",
+        "android_client_info": {
+          "package_name": "com.aistudio.banjulway.kxmpzq"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyByLlpoQouM9CQ-Y1qGIpOczoiO3H9s2kQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
