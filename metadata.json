@@ -1,5 +1,5 @@
 {
-  "name": "BanjulWay",
+  "name": "WayGo",
   "description": "A localized ride-hailing mobile application connecting passengers with verified car and tricycle drivers across Banjul and Kanifing, The Gambia.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

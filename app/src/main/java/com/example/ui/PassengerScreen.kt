@@ -55,7 +55,7 @@ val GAMBIA_LOCATIONS = listOf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PassengerScreen(
-    viewModel: BanjulWayViewModel,
+    viewModel: WayGoViewModel,
     modifier: Modifier = Modifier
 ) {
     val isLoggedIn by viewModel.isUserLoggedIn.collectAsState()
@@ -105,7 +105,7 @@ fun PassengerScreen(
                             )
                         }
                         Text(
-                            text = "BanjulWay",
+                            text = "WayGo",
                             color = BrandBluePrimary,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 20.sp,
@@ -218,7 +218,7 @@ fun SosDialog() {
             text = {
                 Column {
                     Text(
-                        "Are you experiencing an emergency? BanjulWay operates real-time tracking shared immediately with local Gambia security response teams in Banjul and Serrekunda.",
+                        "Are you experiencing an emergency? WayGo operates real-time tracking shared immediately with local Gambia security response teams in Banjul and Serrekunda.",
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -279,13 +279,13 @@ fun PassengerAuthView(
             ) {
                 Icon(
                     imageVector = Icons.Default.DirectionsCar,
-                    contentDescription = "BanjulWay Logo",
+                    contentDescription = "WayGo Logo",
                     tint = BrandBluePrimary,
                     modifier = Modifier.size(60.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "BANJULWAY",
+                    text = "WAYGO",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Black,
                     color = BrandBlueDark,
@@ -362,7 +362,7 @@ fun PassengerAuthView(
                             Icon(Icons.Default.Sms, contentDescription = "SMS", tint = BrandBluePrimary)
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
-                                Text("BanjulWay Security", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BrandBlueDark)
+                                Text("WayGo Security", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BrandBlueDark)
                                 Text("Use OTP code: $generatedOtp", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = SuccessGreen)
                             }
                         }
@@ -397,7 +397,7 @@ fun PassengerAuthView(
 
 @Composable
 fun HomeScreenContent(
-    viewModel: BanjulWayViewModel,
+    viewModel: WayGoViewModel,
     profile: UserProfileEntity?
 ) {
     val drivers by viewModel.allDrivers.collectAsState()
@@ -486,7 +486,7 @@ fun HomeScreenContent(
         // Map Display
         item {
             Box(modifier = Modifier.fillMaxWidth()) {
-                BanjulWayMapView(
+                WayGoMapView(
                     drivers = drivers,
                     activeTrip = activeTrip,
                     simulatedDriverLat = simLat,
@@ -994,7 +994,7 @@ fun HomeScreenContent(
                                         modifier = Modifier.size(36.dp)
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text("BanjulWay Sedan", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                    Text("WayGo Sedan", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
                                     Text("Est. ${estimatedFare} GMD", fontSize = 11.sp, color = BrandBlueDark.copy(alpha = 0.7f))
                                     Text("Best Value", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
                                 }
@@ -1127,7 +1127,7 @@ fun HomeScreenContent(
                         ) {
                             Icon(Icons.Default.DirectionsCar, contentDescription = "r")
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Request BanjulWay Ride", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Request WayGo Ride", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -1150,7 +1150,7 @@ fun HomeScreenContent(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.EventNote, contentDescription = "Schedule", tint = BrandBluePrimary)
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Schedule BanjulWay Ride", color = BrandBlueDark, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                        Text("Schedule WayGo Ride", color = BrandBlueDark, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                                     }
                                 },
                                 text = {
@@ -1596,7 +1596,7 @@ fun HomeScreenContent(
                                     }
 
                                     if (showChatDialog) {
-                                        BanjulWayChatDialog(
+                                        WayGoChatDialog(
                                             tripId = activeTrip!!.id,
                                             currentRole = "PASSENGER",
                                             currentUserId = "current_passenger",
@@ -1633,7 +1633,7 @@ fun HomeScreenContent(
                                             title = { Text("Encrypted Call Masking", fontWeight = FontWeight.Bold) },
                                             text = {
                                                 Text(
-                                                    "Calling driver ${activeTrip!!.driverName} via secure BanjulWay central mask. Your personal phone is safe from third parties.\n\nSimulated Dial: +220 110-MASK-${activeTrip!!.driverId?.takeLast(4)}"
+                                                    "Calling driver ${activeTrip!!.driverName} via secure WayGo central mask. Your personal phone is safe from third parties.\n\nSimulated Dial: +220 110-MASK-${activeTrip!!.driverId?.takeLast(4)}"
                                                 )
                                             },
                                             confirmButton = {
@@ -1910,7 +1910,7 @@ fun HomeScreenContent(
     }
 
     if (showFareEstimatorDialog) {
-        BanjulWayFareEstimatorDialog(
+        WayGoFareEstimatorDialog(
             onDismiss = { showFareEstimatorDialog = false },
             onApplyRoute = { pLoc, dLoc, vType ->
                 pickupName = pLoc.name
@@ -1925,7 +1925,7 @@ fun HomeScreenContent(
 }
 
 @Composable
-fun HistoryScreenContent(viewModel: BanjulWayViewModel) {
+fun HistoryScreenContent(viewModel: WayGoViewModel) {
     // Highly polished passenger ride history log matching localized taxi services in Banjul
     val trips by viewModel.allTrips.collectAsState()
     val drivers by viewModel.allDrivers.collectAsState()
@@ -2485,7 +2485,7 @@ fun HistoryScreenContent(viewModel: BanjulWayViewModel) {
 
 @Composable
 fun ProfileScreenContent(
-    viewModel: BanjulWayViewModel,
+    viewModel: WayGoViewModel,
     profile: UserProfileEntity?,
     onBack: () -> Unit
 ) {
@@ -2900,14 +2900,14 @@ fun ProfileScreenContent(
 }
 
 @Composable
-fun SupportInboxContent(viewModel: BanjulWayViewModel) {
+fun SupportInboxContent(viewModel: WayGoViewModel) {
     val messages by viewModel.supportMessages.collectAsState()
     var messageInput by remember { mutableStateOf("") }
     val listState = remember { androidx.compose.foundation.lazy.LazyListState() }
     val coroutineScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-        Text("BanjulWay Live Help Center", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BrandBlueDark)
+        Text("WayGo Live Help Center", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BrandBlueDark)
         Text("Your chat with support team and active drivers.", fontSize = 11.sp, color = NeutralGray)
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -2938,7 +2938,7 @@ fun SupportInboxContent(viewModel: BanjulWayViewModel) {
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Text(
-                                text = if (isMe) "You (Passenger)" else "BanjulWay Support Agent",
+                                text = if (isMe) "You (Passenger)" else "WayGo Support Agent",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
                                 color = if (isMe) Color.White.copy(alpha = 0.8f) else BrandBluePrimary
@@ -3093,7 +3093,7 @@ fun FlutterwaveCheckoutDialog(
                                     progress = 1.0f
                                     
                                     // Handle success redirect checking
-                                    if (url != null && url.contains("standard-checkout-redirect.banjulway.com")) {
+                                    if (url != null && url.contains("standard-checkout-redirect.waygo.com")) {
                                         val uri = android.net.Uri.parse(url)
                                         val status = uri.getQueryParameter("status")
                                         val txRef = uri.getQueryParameter("tx_ref") ?: "flw_tx_ref_" + System.currentTimeMillis()
@@ -3109,7 +3109,7 @@ fun FlutterwaveCheckoutDialog(
 
                                 override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean {
                                     val url = request?.url?.toString() ?: ""
-                                    if (url.contains("standard-checkout-redirect.banjulway.com")) {
+                                    if (url.contains("standard-checkout-redirect.waygo.com")) {
                                         val uri = android.net.Uri.parse(url)
                                         val status = uri.getQueryParameter("status")
                                         val txRef = uri.getQueryParameter("tx_ref") ?: "flw_tx_ref_" + System.currentTimeMillis()
@@ -3289,7 +3289,7 @@ fun DriverTrustProfileDialog(
                             modifier = Modifier.size(13.dp)
                         )
                         Text(
-                            text = "BanjulWay Trust Verified",
+                            text = "WayGo Trust Verified",
                             color = SuccessGreen,
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.5.sp
@@ -3686,7 +3686,7 @@ fun DriverTrustProfileDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "BanjulWay Safety Checklist",
+                                text = "WayGo Safety Checklist",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.5.sp,
                                 color = BrandBlueDark

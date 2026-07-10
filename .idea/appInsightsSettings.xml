@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.aistudio.banjulway.kxmpzq" />
-                  <option name="mobileSdkAppId" value="1:70054013320:android:1ae187793aa190d08f323d" />
-                  <option name="projectId" value="banjulway" />
-                  <option name="projectNumber" value="70054013320" />
+                  <option name="appId" value="PLACEHOLDER" />
+                  <option name="mobileSdkAppId" value="" />
+                  <option name="projectId" value="" />
+                  <option name="projectNumber" value="" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

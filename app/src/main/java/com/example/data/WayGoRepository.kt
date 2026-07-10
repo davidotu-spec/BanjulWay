@@ -2,7 +2,7 @@ package com.example.data
 
 import kotlinx.coroutines.flow.Flow
 
-class BanjulWayRepository(private val dao: BanjulWayDao) {
+class WayGoRepository(private val dao: WayGoDao) {
 
     // User Profile
     val userProfileFlow: Flow<UserProfileEntity?> = dao.getUserProfileFlow()

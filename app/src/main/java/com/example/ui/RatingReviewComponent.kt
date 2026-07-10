@@ -107,7 +107,7 @@ fun RatingReviewComponent(
 
             // Subheader
             Text(
-                text = "Thank you for riding with BanjulWay!",
+                text = "Thank you for riding with WayGo!",
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 18.sp,
                 color = BrandBlueDark,

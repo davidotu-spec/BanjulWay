@@ -4,7 +4,7 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
 @Dao
-interface BanjulWayDao {
+interface WayGoDao {
     // User Profile
     @Query("SELECT * FROM user_profiles WHERE id = 'current_passenger' LIMIT 1")
     fun getUserProfileFlow(): Flow<UserProfileEntity?>

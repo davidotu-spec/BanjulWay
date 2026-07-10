@@ -120,7 +120,10 @@ fun SosEmergencyDialog(
                 alertLogs.add("📡 Precise Coords: ${String.format("%.5f", pLat)} N, ${String.format("%.5f", pLng)} W")
                 alertLogs.add("🚔 Local Patrol is being routed to your active GPS location!")
                 if (activeTripId != null) {
-                    alertLogs.add("📱 Linked active BanjulWay Ride Ref: $activeTripId")
+                    alertLogs.add("🚨 SUCCESS: SOS Distress Signal broadcasted to $authorityName")
+                    alertLogs.add("📡 Precise Coords: ${String.format("%.5f", pLat)} N, ${String.format("%.5f", pLng)} W")
+                    alertLogs.add("🚔 Local Patrol is being routed to your active GPS location!")
+                    alertLogs.add("📱 Linked active WayGo Ride Ref: $activeTripId")
                 }
             }
         }
@@ -150,7 +153,7 @@ fun SosEmergencyDialog(
                     modifier = Modifier.size(28.dp)
                 )
                 Text(
-                    text = "BanjulWay Emergency Guard",
+                    text = "WayGo Emergency Guard",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = BrandBlueDark
@@ -217,7 +220,7 @@ fun SosEmergencyDialog(
 
                             IconButton(
                                 onClick = {
-                                    val coordsStr = "My GPS Coords: Lat $pLat, Lng $pLng. BanjulWay distress guard alert."
+                                    val coordsStr = "My GPS Coords: Lat $pLat, Lng $pLng. WayGo distress guard alert."
                                     clipboardManager.setText(AnnotatedString(coordsStr))
                                 },
                                 modifier = Modifier.size(24.dp)

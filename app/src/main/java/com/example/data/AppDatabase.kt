@@ -21,19 +21,19 @@ import kotlinx.coroutines.launch
     version = 4,
     exportSchema = false
 )
-abstract class BanjulWayDatabase : RoomDatabase() {
-    abstract fun dao(): BanjulWayDao
+abstract class WayGoDatabase : RoomDatabase() {
+    abstract fun dao(): WayGoDao
 
     companion object {
         @Volatile
-        private var INSTANCE: BanjulWayDatabase? = null
+        private var INSTANCE: WayGoDatabase? = null
 
-        fun getDatabase(context: Context, scope: CoroutineScope): BanjulWayDatabase {
+        fun getDatabase(context: Context, scope: CoroutineScope): WayGoDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
-                    BanjulWayDatabase::class.java,
-                    "banjulway_database"
+                    WayGoDatabase::class.java,
+                    "waygo_database"
                 )
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(scope))
@@ -56,7 +56,7 @@ abstract class BanjulWayDatabase : RoomDatabase() {
             }
         }
 
-        private suspend fun preseedData(dao: BanjulWayDao) {
+        private suspend fun preseedData(dao: WayGoDao) {
             // Seed passenger profile
             dao.insertOrUpdateProfile(
                 UserProfileEntity(
@@ -227,7 +227,7 @@ abstract class BanjulWayDatabase : RoomDatabase() {
             dao.insertSupportMessage(
                 SupportMessageEntity(
                     senderRole = "PASSENGER",
-                    message = "Hello! Welcome to BanjulWay. How can we help you with your journey in Gambia today?",
+                    message = "Hello! Welcome to WayGo. How can we help you with your journey in Gambia today?",
                     status = "RESOLVED",
                     issueCategory = "Welcome"
                 )

@@ -22,8 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.AdminScreen
-import com.example.ui.BanjulWayViewModel
-import com.example.ui.BanjulWayViewModelFactory
+import com.example.ui.WayGoViewModel
+import com.example.ui.WayGoViewModelFactory
 import com.example.ui.DriverScreen
 import com.example.ui.PassengerScreen
 import com.example.ui.theme.*
@@ -42,15 +42,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 // Fetch lazy initialized repo from application class
-                val app = application as BanjulWayApplication
-                val factory = BanjulWayViewModelFactory(app.repository)
-                val viewModel: BanjulWayViewModel = viewModel(factory = factory)
+                val app = application as WayGoApplication
+                val factory = WayGoViewModelFactory(app.repository)
+                val viewModel: WayGoViewModel = viewModel(factory = factory)
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = BrandBlueLight
                 ) {
-                    BanjulWayMasterApp(viewModel)
+                    WayGoMasterApp(viewModel)
                 }
             }
         }
@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun BanjulWayMasterApp(viewModel: BanjulWayViewModel) {
+fun WayGoMasterApp(viewModel: WayGoViewModel) {
     val activeRole by viewModel.currentRole.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeNotif by viewModel.activePushNotification.collectAsState()
@@ -186,7 +186,7 @@ fun BanjulWayMasterApp(viewModel: BanjulWayViewModel) {
                                 )
                                 Column {
                                     Text(
-                                        text = "BanjulWay • Driver Push Alert",
+                                        text = "WayGo • Driver Push Alert",
                                         color = Color.White.copy(alpha = 0.7f),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -312,7 +312,7 @@ fun showAndroidSystemNotification(context: Context, title: String, message: Stri
     )
 
     val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        Notification.Builder(context, "banjulway_driver_alerts")
+        Notification.Builder(context, "waygo_driver_alerts")
     } else {
         @Suppress("DEPRECATION")
         Notification.Builder(context)

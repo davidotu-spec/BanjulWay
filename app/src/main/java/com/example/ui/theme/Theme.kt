@@ -37,7 +37,7 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Set to false by default to strictly enforce BanjulWay brand aesthetics
+    // Set to false by default to strictly enforce WayGo brand aesthetics
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {

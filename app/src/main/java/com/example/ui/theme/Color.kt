@@ -2,7 +2,7 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// BanjulWay Clean Minimalism Brand Colors
+// WayGo Clean Minimalism Brand Colors
 val BrandBluePrimary = Color(0xFF0060A9)      // Clean Indigo/Blue accent
 val BrandBlueSecondary = Color(0xFF0284C7)    // Modern Electric Blue
 val BrandBlueLight = Color(0xFFF7F9FF)        // Light Clean background (#F7F9FF)

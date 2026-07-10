@@ -310,7 +310,7 @@ fun FareEstimationCalculator(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BanjulWayFareEstimatorDialog(
+fun WayGoFareEstimatorDialog(
     onDismiss: () -> Unit,
     onApplyRoute: (GLocation, GLocation, String) -> Unit,
     modifier: Modifier = Modifier
@@ -405,7 +405,7 @@ fun BanjulWayFareEstimatorDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "BanjulWay Fare Estimator",
+                                text = "WayGo Fare Estimator",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = BrandBlueDark

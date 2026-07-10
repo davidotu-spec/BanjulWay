@@ -1,16 +1,16 @@
 package com.example
 
 import android.app.Application
-import com.example.data.BanjulWayDatabase
-import com.example.data.BanjulWayRepository
+import com.example.data.WayGoDatabase
+import com.example.data.WayGoRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 
-class BanjulWayApplication : Application() {
+class WayGoApplication : Application() {
     val applicationScope = CoroutineScope(SupervisorJob())
 
-    val database by lazy { BanjulWayDatabase.getDatabase(this, applicationScope) }
-    val repository by lazy { BanjulWayRepository(database.dao()) }
+    val database by lazy { WayGoDatabase.getDatabase(this, applicationScope) }
+    val repository by lazy { WayGoRepository(database.dao()) }
 
     override fun onCreate() {
         super.onCreate()
@@ -19,10 +19,10 @@ class BanjulWayApplication : Application() {
 
     private fun createNotificationChannel() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val name = "BanjulWay Alerts"
+            val name = "WayGo Alerts"
             val descriptionText = "Notifications for nearby ride requests and booking status updates"
             val importance = android.app.NotificationManager.IMPORTANCE_HIGH
-            val channel = android.app.NotificationChannel("banjulway_driver_alerts", name, importance).apply {
+            val channel = android.app.NotificationChannel("waygo_driver_alerts", name, importance).apply {
                 description = descriptionText
             }
             val notificationManager = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager

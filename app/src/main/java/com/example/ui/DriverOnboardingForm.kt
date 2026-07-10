@@ -27,7 +27,7 @@ import com.example.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverOnboardingForm(
-    viewModel: BanjulWayViewModel,
+    viewModel: WayGoViewModel,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {

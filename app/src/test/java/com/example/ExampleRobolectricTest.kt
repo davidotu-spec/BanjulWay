@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.*
-import com.example.ui.BanjulWayViewModel
+import com.example.ui.WayGoViewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -21,16 +21,16 @@ import org.robolectric.annotation.Config
 @Config(sdk = [36])
 class ExampleRobolectricTest {
 
-    private lateinit var db: BanjulWayDatabase
-    private lateinit var repository: BanjulWayRepository
+    private lateinit var db: WayGoDatabase
+    private lateinit var repository: WayGoRepository
 
     @Before
     fun createDb() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, BanjulWayDatabase::class.java)
+        db = Room.inMemoryDatabaseBuilder(context, WayGoDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        repository = BanjulWayRepository(db.dao())
+        repository = WayGoRepository(db.dao())
     }
 
     @After
@@ -154,7 +154,7 @@ class ExampleRobolectricTest {
         repository.saveTrip(activeTrip)
 
         // Instantiate view model
-        val viewModel = BanjulWayViewModel(repository)
+        val viewModel = WayGoViewModel(repository)
 
         // Verify it's active
         val activeBefore = repository.getActiveTrip()

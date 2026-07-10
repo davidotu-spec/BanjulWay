@@ -55,7 +55,7 @@ val GAMBIAN_LANDMARKS = listOf(
 
 @OptIn(ExperimentalTextApi::class)
 @Composable
-fun BanjulWayMapView(
+fun WayGoMapView(
     modifier: Modifier = Modifier,
     drivers: List<DriverEntity> = emptyList(),
     activeTrip: TripEntity? = null,

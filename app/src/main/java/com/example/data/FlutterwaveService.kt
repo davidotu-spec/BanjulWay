@@ -86,14 +86,14 @@ object FlutterwaveManager {
             txRef = tripTxRef,
             amount = amountGmd.toString(),
             currency = "GMD", // Standard Gambia Dalasi
-            redirectUrl = "https://standard-checkout-redirect.banjulway.com/success",
+            redirectUrl = "https://standard-checkout-redirect.waygo.com/success",
             customer = FlutterwaveCustomer(
                 email = if (passengerEmail.isNotBlank()) passengerEmail else "davidotu@mixxd.org",
                 phonenumber = passengerPhone,
                 name = passengerName
             ),
             customizations = FlutterwaveCustomizations(
-                title = "BanjulWay Ride",
+                title = "WayGo Ride",
                 logo = "https://ai.studio/build/logo.png"
             )
         )

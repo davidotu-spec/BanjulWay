@@ -28,7 +28,7 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DriverScreen(
-    viewModel: BanjulWayViewModel,
+    viewModel: WayGoViewModel,
     modifier: Modifier = Modifier
 ) {
     val drivers by viewModel.allDrivers.collectAsState()
@@ -76,7 +76,7 @@ fun DriverScreen(
                         }
                         Column {
                             Text(
-                                text = "BanjulWay",
+                                text = "WayGo",
                                 color = BrandBluePrimary,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 18.sp,
@@ -282,7 +282,7 @@ fun DriverScreen(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = if (currentDriver.approvalStatus == "APPROVED") "Verified BanjulWay Partner" else "Under Review by Admin",
+                                            text = if (currentDriver.approvalStatus == "APPROVED") "Verified WayGo Partner" else "Under Review by Admin",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (currentDriver.approvalStatus == "APPROVED") SuccessGreen else ErrorRed
@@ -1007,7 +1007,7 @@ fun DriverScreen(
                                     )
 
                                     if (showDriverChatDialog) {
-                                        BanjulWayChatDialog(
+                                        WayGoChatDialog(
                                             tripId = activeExecution.id,
                                             currentRole = "DRIVER",
                                             currentUserId = currentDriver.id,
@@ -1041,7 +1041,7 @@ fun DriverScreen(
                                             title = { Text("Encrypted Call Masking", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
                                             text = {
                                                 Text(
-                                                    "Calling passenger ${activeExecution.passengerName} via secure BanjulWay masked gateway. Phone: +220 330-WAY-MASK",
+                                                    "Calling passenger ${activeExecution.passengerName} via secure WayGo masked gateway. Phone: +220 330-WAY-MASK",
                                                     fontSize = 12.sp
                                                 )
                                             },
@@ -1367,7 +1367,7 @@ fun DriverScreen(
                     title = { Text("Driver Hub Subscriptions") },
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("BanjulWay works with a zero-interest subscription structure for drivers instead of taxing heavily.")
+                            Text("WayGo works with a zero-interest subscription structure for drivers instead of taxing heavily.")
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Card(

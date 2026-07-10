@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
-class BanjulWayViewModel(private val repository: BanjulWayRepository) : ViewModel() {
+class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
 
     // General app states
     val userProfile = repository.userProfileFlow.stateIn(
@@ -699,7 +699,7 @@ class BanjulWayViewModel(private val repository: BanjulWayRepository) : ViewMode
 
             // Sync updated trip details directly to Firestore
             FirestoreManager.saveTripToFirestore(trip.copy(rating = stars, reviewComment = comment, reviewTags = tagStr, tipGmd = tipGmd)) { success ->
-                android.util.Log.d("BanjulWayViewModel", "Cloud Firestore trip sync status: $success")
+                android.util.Log.d("WayGoViewModel", "Cloud Firestore trip sync status: $success")
                 refreshTripHistoryFromFirestore()
             }
         }
@@ -782,8 +782,8 @@ class BanjulWayViewModel(private val repository: BanjulWayRepository) : ViewMode
             // Simulate quick supportive reply from system admin
             delay(1500)
             val supportQuotes = listOf(
-                "Thank you for contacting BanjulWay support. We're on it and will resolve your issue right away!",
-                "Hello, your ticket is recognized. BanjulWay is committed to keeping transit transparent and secure.",
+                "Thank you for contacting WayGo support. We're on it and will resolve your issue right away!",
+                "Hello, your ticket is recognized. WayGo is committed to keeping transit transparent and secure.",
                 "Yes! Safe travel is our highest priority! If there is an emergency, feel free to tap the Emergency SOS button."
             )
             val autoReply = SupportMessageEntity(
@@ -888,7 +888,7 @@ class BanjulWayViewModel(private val repository: BanjulWayRepository) : ViewMode
 
         FirestoreManager.sendChatMessage(newMsg) { success ->
             if (!success) {
-                android.util.Log.e("BanjulWayViewModel", "Failed to sync message to Cloud Firestore.")
+                android.util.Log.e("WayGoViewModel", "Failed to sync message to Cloud Firestore.")
             }
         }
 
@@ -972,11 +972,11 @@ class BanjulWayViewModel(private val repository: BanjulWayRepository) : ViewMode
     }
 }
 
-class BanjulWayViewModelFactory(private val repository: BanjulWayRepository) : ViewModelProvider.Factory {
+class WayGoViewModelFactory(private val repository: WayGoRepository) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(BanjulWayViewModel::class.java)) {
+        if (modelClass.isAssignableFrom(WayGoViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return BanjulWayViewModel(repository) as T
+            return WayGoViewModel(repository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

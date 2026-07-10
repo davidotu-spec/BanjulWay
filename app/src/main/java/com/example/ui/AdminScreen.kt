@@ -27,7 +27,7 @@ import com.example.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminScreen(
-    viewModel: BanjulWayViewModel,
+    viewModel: WayGoViewModel,
     modifier: Modifier = Modifier
 ) {
     val drivers by viewModel.allDrivers.collectAsState()
@@ -55,7 +55,7 @@ fun AdminScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "B",
+                                "W",
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
                                 fontSize = 18.sp,
@@ -64,7 +64,7 @@ fun AdminScreen(
                         }
                         Column {
                             Text(
-                                text = "BanjulWay",
+                                text = "WayGo",
                                 color = BrandBluePrimary,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 18.sp,
@@ -215,7 +215,7 @@ fun AdminMetricsTab(
                     colors = CardDefaults.cardColors(containerColor = PureWhite)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Text("BanjulWay Take (15%)", fontSize = 11.sp, color = NeutralGray)
+                        Text("WayGo Take (15%)", fontSize = 11.sp, color = NeutralGray)
                         Text("${systemTake} GMD", fontSize = 22.sp, fontWeight = FontWeight.Black, color = SuccessGreen)
                         Text("Gross: $grossRevenue GMD", fontSize = 10.sp, color = NeutralGray)
                     }

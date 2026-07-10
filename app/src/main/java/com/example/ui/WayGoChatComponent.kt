@@ -28,12 +28,12 @@ import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 
 @Composable
-fun BanjulWayChatDialog(
+fun WayGoChatDialog(
     tripId: String,
     currentRole: String, // "PASSENGER" or "DRIVER"
     currentUserId: String,
     currentUserName: String,
-    viewModel: BanjulWayViewModel,
+    viewModel: WayGoViewModel,
     onDismiss: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
