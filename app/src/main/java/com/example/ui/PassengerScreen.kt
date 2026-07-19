@@ -8,6 +8,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -97,7 +98,7 @@ fun PassengerScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "B",
+                                "W",
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
                                 fontSize = 18.sp,
@@ -476,6 +477,8 @@ fun HomeScreenContent(
         (30 + (distanceUnit * 2200)).toInt()
     }
 
+    val savedPlaces by viewModel.allSavedPlaces.collectAsState()
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -578,6 +581,7 @@ fun HomeScreenContent(
                         // SAVED PLACES SECTION
                         val savedPlaces by viewModel.allSavedPlaces.collectAsState()
 
+                        // Saved Places Horizontal List
                         Text(
                             text = "Saved Places",
                             fontWeight = FontWeight.Bold,
@@ -586,11 +590,11 @@ fun HomeScreenContent(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth().testTag("saved_places_row")
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).testTag("saved_places_row"),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(savedPlaces) { place ->
+                            savedPlaces.forEach { place ->
                                 val icon = when (place.iconType) {
                                     "HOME" -> Icons.Default.Home
                                     "WORK" -> Icons.Default.Work
@@ -637,33 +641,31 @@ fun HomeScreenContent(
                             }
                             
                             // Add Saved Place Button
-                            item {
-                                Card(
-                                    modifier = Modifier
-                                        .clickable { showAddSavedPlaceDialog = true }
-                                        .testTag("add_saved_place_button"),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+                            Card(
+                                modifier = Modifier
+                                    .clickable { showAddSavedPlaceDialog = true }
+                                    .testTag("add_saved_place_button"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = "Add Place",
-                                            tint = BrandBluePrimary,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "Add Place",
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 12.sp,
-                                            color = BrandBluePrimary
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add Place",
+                                        tint = BrandBluePrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Add Place",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 12.sp,
+                                        color = BrandBluePrimary
+                                    )
                                 }
                             }
                         }

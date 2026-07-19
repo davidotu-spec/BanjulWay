@@ -67,7 +67,7 @@ fun DriverScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "B",
+                                "W",
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
                                 fontSize = 18.sp,
@@ -799,18 +799,22 @@ fun DriverScreen(
                                         .background(Color.LightGray.copy(alpha = 0.3f))
                                 ) {
                                     if (totalGmd > 0f) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .weight(banjulRatio)
-                                                .background(BrandBlueSecondary)
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .weight(kanifingRatio)
-                                                .background(SuccessGreen)
-                                        )
+                                        if (banjulRatio > 0f) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .weight(banjulRatio.coerceAtLeast(0.01f))
+                                                    .background(BrandBlueSecondary)
+                                            )
+                                        }
+                                        if (kanifingRatio > 0f) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .weight(kanifingRatio.coerceAtLeast(0.01f))
+                                                    .background(SuccessGreen)
+                                            )
+                                        }
                                     } else {
                                         Box(
                                             modifier = Modifier
