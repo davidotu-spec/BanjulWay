@@ -34,11 +34,29 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.Manifest
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        // Handle the result if needed
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Request notification permission for API 33+
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         setContent {
             MyApplicationTheme {
                 // Fetch lazy initialized repo from application class
@@ -81,9 +99,7 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding() // avoid camera notch collision nicely
+            modifier = Modifier.fillMaxSize()
         ) {
             // Clean Minimalism Segment Switcher
             Card(
@@ -308,7 +324,7 @@ fun showAndroidSystemNotification(context: Context, title: String, message: Stri
         context,
         0,
         intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
     val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
