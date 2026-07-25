@@ -44,6 +44,9 @@ interface WayGoDao {
     @Query("SELECT * FROM trips ORDER BY timestamp DESC")
     fun getAllTripsFlow(): Flow<List<TripEntity>>
 
+    @Query("SELECT * FROM trips WHERE driverId = :driverId ORDER BY timestamp DESC")
+    suspend fun getTripsForDriver(driverId: String): List<TripEntity>
+
     @Query("SELECT * FROM trips WHERE id = :id LIMIT 1")
     suspend fun getTripById(id: String): TripEntity?
 
@@ -94,4 +97,17 @@ interface WayGoDao {
 
     @Query("DELETE FROM saved_places WHERE id = :id")
     suspend fun deleteSavedPlaceById(id: Long)
+
+    @Query("DELETE FROM saved_places WHERE label = :label")
+    suspend fun deleteSavedPlacesByLabel(label: String)
+
+    // Vehicle Mileage & Maintenance
+    @Query("SELECT * FROM vehicle_mileage WHERE driverId = :driverId LIMIT 1")
+    fun getVehicleMileageFlow(driverId: String): Flow<VehicleMileageEntity?>
+
+    @Query("SELECT * FROM vehicle_mileage WHERE driverId = :driverId LIMIT 1")
+    suspend fun getVehicleMileage(driverId: String): VehicleMileageEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrUpdateVehicleMileage(mileage: VehicleMileageEntity)
 }

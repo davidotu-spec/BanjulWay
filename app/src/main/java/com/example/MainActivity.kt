@@ -34,39 +34,29 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.Manifest
-import androidx.activity.result.contract.ActivityResultContracts
-import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        // Handle the result if needed
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
-        // Request notification permission for API 33+
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-
         setContent {
-            MyApplicationTheme {
-                // Fetch lazy initialized repo from application class
-                val app = application as WayGoApplication
-                val factory = WayGoViewModelFactory(app.repository)
-                val viewModel: WayGoViewModel = viewModel(factory = factory)
+            // Fetch lazy initialized repo from application class
+            val app = application as WayGoApplication
+            val sharedPrefs = app.getSharedPreferences("waygo_prefs", android.content.Context.MODE_PRIVATE)
+            val factory = WayGoViewModelFactory(app.repository, sharedPrefs)
+            val viewModel: WayGoViewModel = viewModel(factory = factory)
 
+            val themeMode by viewModel.themeMode.collectAsState()
+            val isDarkTheme = when (themeMode) {
+                com.example.ui.ThemeMode.LIGHT -> false
+                com.example.ui.ThemeMode.DARK -> true
+                com.example.ui.ThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+
+            MyApplicationTheme(darkTheme = isDarkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = BrandBlueLight
+                    color = MaterialTheme.colorScheme.background
                 ) {
                     WayGoMasterApp(viewModel)
                 }
@@ -75,11 +65,14 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WayGoMasterApp(viewModel: WayGoViewModel) {
     val activeRole by viewModel.currentRole.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val activeNotif by viewModel.activePushNotification.collectAsState()
+
+    var showSectionSelectorSheet by remember { mutableStateOf(false) }
 
     // Status bar push notification triggers
     LaunchedEffect(activeNotif) {
@@ -98,63 +91,24 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Clean Minimalism Segment Switcher
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .testTag("role_switcher_card"),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE2E8F0)), // Slate-200 background
-                elevation = CardDefaults.cardElevation(0.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Passenger segment
-                    RoleSegmentButton(
-                        label = "Passenger",
-                        icon = Icons.Default.DirectionsCar,
-                        isActive = activeRole == "PASSENGER",
-                        onClick = { viewModel.setRole("PASSENGER") },
-                        modifier = Modifier.weight(1f).testTag("segment_passenger")
-                    )
-
-                    // Driver segment
-                    RoleSegmentButton(
-                        label = "Driver Hub",
-                        icon = Icons.Default.TwoWheeler,
-                        isActive = activeRole == "DRIVER",
-                        onClick = { viewModel.setRole("DRIVER") },
-                        modifier = Modifier.weight(1f).testTag("segment_driver")
-                    )
-
-                    // Admin segment
-                    RoleSegmentButton(
-                        label = "Admin Panel",
-                        icon = Icons.Default.AdminPanelSettings,
-                        isActive = activeRole == "ADMIN",
-                        onClick = { viewModel.setRole("ADMIN") },
-                        modifier = Modifier.weight(1f).testTag("segment_admin")
-                    )
-                }
+        // Active View Swap - Full screen without intrusive top segment header bar
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (activeRole) {
+                "PASSENGER" -> PassengerScreen(viewModel = viewModel)
+                "DRIVER" -> DriverScreen(viewModel = viewModel)
+                "ADMIN" -> AdminScreen(viewModel = viewModel)
             }
+        }
 
-            // Active View Swap
-            Box(modifier = Modifier.weight(1f)) {
-                when (activeRole) {
-                    "PASSENGER" -> PassengerScreen(viewModel = viewModel)
-                    "DRIVER" -> DriverScreen(viewModel = viewModel)
-                    "ADMIN" -> AdminScreen(viewModel = viewModel)
-                }
-            }
+        // Modal Bottom Sheet to switch between distinct app sections
+        if (showSectionSelectorSheet) {
+            AppSectionSelectionSheet(
+                activeRole = activeRole,
+                onRoleSelected = { newRole ->
+                    viewModel.setRole(newRole)
+                },
+                onDismiss = { showSectionSelectorSheet = false }
+            )
         }
 
         // Heads-up Push Notification HUD sliding down elegantly!
@@ -324,7 +278,7 @@ fun showAndroidSystemNotification(context: Context, title: String, message: Stri
         context,
         0,
         intent,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
     )
 
     val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -345,6 +299,178 @@ fun showAndroidSystemNotification(context: Context, title: String, message: Stri
     notificationManager.notify(System.currentTimeMillis().toInt(), notification)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppSectionSelectionSheet(
+    activeRole: String,
+    onRoleSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = {
+            BottomSheetDefaults.DragHandle()
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp, top = 8.dp)
+                .testTag("role_switcher_card")
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(BrandBluePrimary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GridView,
+                        contentDescription = "Switch Section",
+                        tint = BrandBluePrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = "WayGo Platform Sections",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Switch between distinct operational modules",
+                        fontSize = 12.sp,
+                        color = NeutralGray
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Section 1: Passenger
+            SectionOptionCard(
+                title = "Passenger Section",
+                subtitle = "Book trips, track driver location & Flutterwave mobile payments",
+                icon = Icons.Default.DirectionsCar,
+                isSelected = activeRole == "PASSENGER",
+                onClick = {
+                    onRoleSelected("PASSENGER")
+                    onDismiss()
+                },
+                modifier = Modifier.testTag("segment_passenger")
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Section 2: Driver Hub
+            SectionOptionCard(
+                title = "Driver Hub Section",
+                subtitle = "Accept ride requests, track mileage, shift performance & payouts",
+                icon = Icons.Default.TwoWheeler,
+                isSelected = activeRole == "DRIVER",
+                onClick = {
+                    onRoleSelected("DRIVER")
+                    onDismiss()
+                },
+                modifier = Modifier.testTag("segment_driver")
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Section 3: Admin Panel
+            SectionOptionCard(
+                title = "Admin Panel Section",
+                subtitle = "System overview, driver onboarding approvals & trip analytics",
+                icon = Icons.Default.AdminPanelSettings,
+                isSelected = activeRole == "ADMIN",
+                onClick = {
+                    onRoleSelected("ADMIN")
+                    onDismiss()
+                },
+                modifier = Modifier.testTag("segment_admin")
+            )
+        }
+    }
+}
+
+@Composable
+fun SectionOptionCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) BrandBluePrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
+        ),
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) BrandBluePrimary else Color.LightGray.copy(alpha = 0.3f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(if (isSelected) BrandBluePrimary else Color.LightGray.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = if (isSelected) Color.White else NeutralGray,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = if (isSelected) BrandBluePrimary else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 11.5.sp,
+                    color = NeutralGray,
+                    lineHeight = 15.sp
+                )
+            }
+
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = BrandBluePrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun RoleSegmentButton(
     label: String,
@@ -354,7 +480,7 @@ fun RoleSegmentButton(
     modifier: Modifier = Modifier
 ) {
     val backColor = if (isActive) BrandBluePrimary else Color.Transparent
-    val contentColor = if (isActive) Color.White else BrandBlueDark.copy(alpha = 0.55f)
+    val contentColor = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
 
     Box(
         modifier = modifier

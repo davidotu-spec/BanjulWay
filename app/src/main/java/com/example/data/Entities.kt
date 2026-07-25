@@ -13,7 +13,11 @@ data class UserProfileEntity(
     val mobileMoneyNumber: String = "",
     val savedHome: String = "Kairaba Avenue, Serrekunda",
     val savedWork: String = "Albert Market, Banjul",
-    val avatarIndex: Int = 0
+    val avatarIndex: Int = 0,
+    val photoUri: String? = null,
+    val isPaymentLinked: Boolean = false,
+    val linkedCardLast4: String = "",
+    val linkedPaymentEmail: String = ""
 )
 
 @Entity(tableName = "drivers")
@@ -53,7 +57,8 @@ data class TripEntity(
     val reviewComment: String = "",
     val reviewTags: String = "", // comma-separated tags e.g. "Safe, Polite"
     val tipGmd: Int = 0,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val commissionGmd: Int = 0
 )
 
 @Entity(tableName = "support_messages")
@@ -96,4 +101,18 @@ data class SavedPlaceEntity(
     val lng: Double,
     val iconType: String // "HOME", "WORK", "GYM", "MARKET", "PLACE"
 )
+
+@Entity(tableName = "vehicle_mileage")
+data class VehicleMileageEntity(
+    @PrimaryKey val driverId: String,
+    val currentMileage: Double = 12450.0,
+    val lastOilChangeMileage: Double = 10000.0,
+    val lastTireCheckMileage: Double = 8000.0,
+    val isSimulatingMileage: Boolean = false,
+    val oilChangeInterval: Double = 5000.0,
+    val tireCheckInterval: Double = 10000.0,
+    val lastNotifiedOilChange: Double = 10000.0,
+    val lastNotifiedTireCheck: Double = 8000.0
+)
+
 

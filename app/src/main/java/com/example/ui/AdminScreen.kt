@@ -79,6 +79,24 @@ fun AdminScreen(
                         }
                     }
                 },
+                actions = {
+                    AssistChip(
+                        onClick = { viewModel.setRole("PASSENGER") },
+                        label = { Text("Passenger", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        leadingIcon = {
+                            Icon(Icons.Default.DirectionsCar, contentDescription = "Passenger", modifier = Modifier.size(14.dp))
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = BrandBlueLight,
+                            labelColor = BrandBluePrimary,
+                            leadingIconContentColor = BrandBluePrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .testTag("admin_switch_passenger_chip")
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = PureWhite)
             )
         },

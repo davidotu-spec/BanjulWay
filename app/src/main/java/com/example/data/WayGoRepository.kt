@@ -42,12 +42,25 @@ class WayGoRepository(private val dao: WayGoDao) {
     
     suspend fun getActiveTrip(): TripEntity? = dao.getActiveTrip()
     suspend fun getTripById(id: String): TripEntity? = dao.getTripById(id)
+    suspend fun getTripsForDriver(driverId: String): List<TripEntity> = dao.getTripsForDriver(driverId)
     
     suspend fun saveTrip(trip: TripEntity) {
         dao.insertOrUpdateTrip(trip)
     }
 
     suspend fun updateTripStatus(tripId: String, status: String) {
+        if (status == "COMPLETED") {
+            val trip = dao.getTripById(tripId)
+            if (trip != null) {
+                val commission = (trip.fareGmd * 0.15).toInt()
+                val updatedTrip = trip.copy(status = "COMPLETED", commissionGmd = commission)
+                dao.insertOrUpdateTrip(updatedTrip)
+                FirestoreManager.saveTripToFirestore(updatedTrip) { success ->
+                    android.util.Log.d("WayGoRepository", "Sync complete status on updateTripStatus: $success")
+                }
+                return
+            }
+        }
         dao.updateTripStatus(tripId, status)
     }
 
@@ -88,5 +101,18 @@ class WayGoRepository(private val dao: WayGoDao) {
 
     suspend fun deleteSavedPlaceById(id: Long) {
         dao.deleteSavedPlaceById(id)
+    }
+
+    suspend fun deleteSavedPlacesByLabel(label: String) {
+        dao.deleteSavedPlacesByLabel(label)
+    }
+
+    // Vehicle Mileage & Maintenance
+    fun getVehicleMileageFlow(driverId: String): Flow<VehicleMileageEntity?> = dao.getVehicleMileageFlow(driverId)
+
+    suspend fun getVehicleMileage(driverId: String): VehicleMileageEntity? = dao.getVehicleMileage(driverId)
+
+    suspend fun saveVehicleMileage(mileage: VehicleMileageEntity) {
+        dao.insertOrUpdateVehicleMileage(mileage)
     }
 }

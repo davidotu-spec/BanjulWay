@@ -338,4 +338,70 @@ class ExampleRobolectricTest {
         val totalNetAllTime = (totalFaresAllTime - totalCommissionAllTime) + totalTipsAllTime
         assertEquals(390, totalNetAllTime) // (400 - 60) + 50 = 390
     }
+
+    @Test
+    fun testNearestDriverMatchingLogic() = runBlocking {
+        val viewModel = WayGoViewModel(repository)
+
+        // Case 1: No drivers seeded. Verify we spawn a simulated fallback matching driver of the correct vehicleType
+        val pickupLat = 13.4471
+        val pickupLng = -16.6791
+        val matched1 = viewModel.findNearestMatchingDriver(pickupLat, pickupLng, "TRICYCLE")
+
+        assertNotNull(matched1)
+        assertEquals("TRICYCLE", matched1.vehicleType)
+        assertEquals("APPROVED", matched1.approvalStatus)
+        assertEquals(true, matched1.isOnline)
+
+        // Case 2: Seed active matching drivers, verify we find the nearest one
+        val farDriver = DriverEntity(
+            id = "drv_far",
+            name = "Far Driver",
+            phone = "+220 771 0001",
+            vehicleType = "CAR",
+            vehiclePlate = "BJL 7000 A",
+            rating = 4.8f,
+            approvalStatus = "APPROVED",
+            isOnline = true,
+            currentLat = 13.5000, // far away
+            currentLng = -16.6700,
+            driverLicense = "DL-2026-FAR"
+        )
+        val closeDriver = DriverEntity(
+            id = "drv_close",
+            name = "Close Driver",
+            phone = "+220 771 0002",
+            vehicleType = "CAR",
+            vehiclePlate = "BJL 8000 B",
+            rating = 4.9f,
+            approvalStatus = "APPROVED",
+            isOnline = true,
+            currentLat = 13.4480, // very close to 13.4471
+            currentLng = -16.6795, // very close to -16.6791
+            driverLicense = "DL-2026-CLOSE"
+        )
+        val offlineDriver = DriverEntity(
+            id = "drv_offline",
+            name = "Offline Driver",
+            phone = "+220 771 0003",
+            vehicleType = "CAR",
+            vehiclePlate = "BJL 9000 C",
+            rating = 4.5f,
+            approvalStatus = "APPROVED",
+            isOnline = false, // offline, should be ignored
+            currentLat = 13.4472,
+            currentLng = -16.6792,
+            driverLicense = "DL-2026-OFFLINE"
+        )
+
+        repository.saveDriver(farDriver)
+        repository.saveDriver(closeDriver)
+        repository.saveDriver(offlineDriver)
+
+        // Match for CAR
+        val matchedCar = viewModel.findNearestMatchingDriver(pickupLat, pickupLng, "CAR")
+        assertNotNull(matchedCar)
+        assertEquals("drv_close", matchedCar.id)
+        assertEquals("Close Driver", matchedCar.name)
+    }
 }

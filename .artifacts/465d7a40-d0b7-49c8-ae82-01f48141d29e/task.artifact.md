@@ -1,4 +1,0 @@
-- `[x]` Add `androidx.fragment:fragment-ktx` to `libs.versions.toml`
-- `[x]` Add `fragment-ktx` dependency to `app/build.gradle.kts`
-- `[x]` Refactor `MainActivity.kt` permission request logic
-- `[x]` Verify fix by running `bundleDebug` and checking for lint errors

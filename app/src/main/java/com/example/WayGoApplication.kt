@@ -1,7 +1,6 @@
 package com.example
 
 import android.app.Application
-import com.google.firebase.FirebaseApp
 import com.example.data.WayGoDatabase
 import com.example.data.WayGoRepository
 import kotlinx.coroutines.CoroutineScope
@@ -15,7 +14,6 @@ class WayGoApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        FirebaseApp.initializeApp(this)
         createNotificationChannel()
     }
 

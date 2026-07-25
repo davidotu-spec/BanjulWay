@@ -1,16 +1,21 @@
 package com.example.ui
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -28,6 +34,10 @@ import androidx.compose.ui.unit.sp
 import com.example.data.DriverEntity
 import com.example.data.TripEntity
 import com.example.ui.theme.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.testTag
+import androidx.compose.ui.semantics.semantics
 
 // LatLng bbox for Kanifing / Serekunda / Banjul region
 // Min Lat: 13.4300, Max Lat: 13.4800
@@ -53,6 +63,17 @@ val GAMBIAN_LANDMARKS = listOf(
     MapLandmark("Independence Stadium", 13.4722, -16.6690, "Bakau national stadium")
 )
 
+private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val r = 6371.0 // Earth's radius in km
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2)
+    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return r * c
+}
+
 @OptIn(ExperimentalTextApi::class)
 @Composable
 fun WayGoMapView(
@@ -62,7 +83,8 @@ fun WayGoMapView(
     simulatedDriverLat: Double? = null,
     simulatedDriverLng: Double? = null,
     passengerLat: Double = 13.4471,
-    passengerLng: Double = -16.6791
+    passengerLng: Double = -16.6791,
+    progress: Float = 0f
 ) {
     val textMeasurer = rememberTextMeasurer()
     val oceanColor = Color(0xFFD3E2EE)
@@ -70,10 +92,13 @@ fun WayGoMapView(
     val roadColor = Color(0xFFCBD5E1)    // Slate-300 clean road borders
     val roadFillColor = Color(0xFFFFFFFF)
 
+    val isActiveRide = activeTrip != null && activeTrip.status in listOf("ACCEPTED", "ARRIVED", "EN_ROUTE")
+    val boxHeight = if (isActiveRide) 320.dp else 260.dp
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(260.dp)
+            .height(boxHeight)
             .clip(RoundedCornerShape(24.dp))
             .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(24.dp))
             .background(landColor)
@@ -241,6 +266,26 @@ fun WayGoMapView(
                 )
             }
 
+            // Draw Driver Approaching Pickup Path (ACCEPTED state visual routing line)
+            if (activeTrip != null && activeTrip.status == "ACCEPTED") {
+                val dLat = simulatedDriverLat ?: (activeTrip.pickupLat + 0.012)
+                val dLng = simulatedDriverLng ?: (activeTrip.pickupLng - 0.009)
+                val dX = getX(dLng)
+                val dY = getY(dLat)
+                val pX = getX(activeTrip.pickupLng)
+                val pY = getY(activeTrip.pickupLat)
+
+                drawLine(
+                    color = AccentAmber,
+                    start = Offset(dX, dY),
+                    end = Offset(pX, pY),
+                    strokeWidth = 3.dp.toPx(),
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                        floatArrayOf(12f, 12f), 0f
+                    )
+                )
+            }
+
             // 5. Draw Idle Online Drivers
             drivers.forEach { driver ->
                 if (driver.isOnline && driver.approvalStatus == "APPROVED" && (activeTrip == null || activeTrip.driverId != driver.id)) {
@@ -322,11 +367,214 @@ fun WayGoMapView(
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "Live Banjul Way Map",
+                text = "Live WayGo Map",
                 color = BrandBlueDark,
                 fontWeight = FontWeight.Bold,
                 fontSize = 9.sp
             )
+        }
+
+        // Real-time progress visualizer HUD Overlay
+        if (isActiveRide) {
+            val trip = activeTrip!!
+            val driverLat = simulatedDriverLat ?: trip.pickupLat
+            val driverLng = simulatedDriverLng ?: trip.pickupLng
+
+            val distanceToPickup = calculateDistance(driverLat, driverLng, trip.pickupLat, trip.pickupLng)
+            val distanceToDropoff = calculateDistance(driverLat, driverLng, trip.dropoffLat, trip.dropoffLng)
+
+            val (displayDist, statusLabel) = if (trip.status == "ACCEPTED") {
+                Pair(distanceToPickup, "Driver approaching pickup")
+            } else if (trip.status == "ARRIVED") {
+                Pair(0.0, "Driver at your pickup location")
+            } else {
+                Pair(distanceToDropoff, "In transit to destination")
+            }
+
+            val trackProgress = when (trip.status) {
+                "ACCEPTED" -> (progress / 0.35f).coerceIn(0f, 1f)
+                "ARRIVED" -> 1.0f
+                "EN_ROUTE" -> ((progress - 0.38f) / 0.62f).coerceIn(0f, 1f)
+                else -> 1.0f
+            }
+
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(10.dp)
+                    .fillMaxWidth()
+                    .semantics { testTag = "realtime_progress_hud" },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.15f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(12.dp)
+                        .fillMaxWidth()
+                ) {
+                    // HUD Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                            val pulseAlpha by infiniteTransition.animateFloat(
+                                initialValue = 0.4f,
+                                targetValue = 1.0f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(800, easing = LinearEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "pulse_alpha"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(SuccessGreen.copy(alpha = pulseAlpha))
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = statusLabel,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                color = BrandBlueDark
+                            )
+                        }
+
+                        Text(
+                            text = if (trip.status == "ARRIVED") "Ready" else String.format("%.2f km left", displayDist),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BrandBluePrimary
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Progress Track Bar
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(28.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val maxWidthPx = constraints.maxWidth
+                        val density = LocalDensity.current
+                        val maxWidthDp = with(density) { maxWidthPx.toDp() }
+
+                        // Background line
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(BrandBlueLight)
+                        )
+
+                        // Filled active progress line
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(trackProgress)
+                                .height(4.dp)
+                                .background(BrandBluePrimary)
+                                .align(Alignment.CenterStart)
+                        )
+
+                        // End node circles
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.Center)
+                        ) {
+                            // Start Node Icon
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                                    .border(1.5.dp, BrandBlueSecondary, CircleShape)
+                                    .align(Alignment.CenterStart),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (trip.status == "ACCEPTED") Icons.Default.MyLocation else Icons.Default.Place,
+                                    contentDescription = "start_node",
+                                    tint = BrandBlueSecondary,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                            }
+
+                            // End Node Icon
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                                    .border(1.5.dp, if (trip.status == "ACCEPTED") SuccessGreen else ErrorRed, CircleShape)
+                                    .align(Alignment.CenterEnd),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (trip.status == "ACCEPTED") Icons.Default.CheckCircle else Icons.Default.Place,
+                                    contentDescription = "end_node",
+                                    tint = if (trip.status == "ACCEPTED") SuccessGreen else ErrorRed,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                            }
+                        }
+
+                        // Sliding Active Driver Vehicle Icon
+                        val iconSize = 22.dp
+                        val maxOffset = maxWidthDp - iconSize
+                        val currentOffset = maxOffset * trackProgress
+
+                        Box(
+                            modifier = Modifier
+                                .offset(x = currentOffset)
+                                .size(iconSize)
+                                .clip(CircleShape)
+                                .background(BrandBluePrimary)
+                                .border(1.dp, Color.White, CircleShape)
+                                .align(Alignment.CenterStart),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DirectionsCar,
+                                contentDescription = "Driver Sliding Indicator",
+                                tint = Color.White,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Labels below progress track
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (trip.status == "ACCEPTED") "Driver Dispatch" else "Pickup Location",
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = NeutralGray
+                        )
+                        Text(
+                            text = if (trip.status == "ACCEPTED") "Your Location" else "Destination",
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = NeutralGray
+                        )
+                    }
+                }
+            }
         }
     }
 }

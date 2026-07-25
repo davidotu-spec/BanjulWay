@@ -195,4 +195,47 @@ class GreetingScreenshotTest {
 
     composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/saved_places_row_screenshot.png")
   }
+
+  @Test
+  fun map_realtime_progress_hud_screenshot() {
+    val dummyTrip = com.example.data.TripEntity(
+      id = "trip_progress_test_123",
+      passengerName = "David Otu",
+      pickupName = "Albert Market, Banjul",
+      dropoffName = "Kairaba Business Hub, Serrekunda",
+      pickupLat = 13.4533,
+      pickupLng = -16.5746,
+      dropoffLat = 13.4471,
+      dropoffLng = -16.6791,
+      fareGmd = 350,
+      paymentMethod = "FLUTTERWAVE",
+      status = "ACCEPTED", // Navigating to pickup
+      vehicleType = "CAR",
+      driverId = "drv_test_123",
+      driverName = "Modou Barrow",
+      vehiclePlate = "BJL 2841 A"
+    )
+
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        Surface(modifier = Modifier.fillMaxSize()) {
+          Box(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            contentAlignment = Alignment.Center
+          ) {
+            com.example.ui.WayGoMapView(
+              modifier = Modifier.fillMaxWidth(),
+              drivers = emptyList(),
+              activeTrip = dummyTrip,
+              simulatedDriverLat = 13.4500,
+              simulatedDriverLng = -16.6000,
+              progress = 0.18f
+            )
+          }
+        }
+      }
+    }
+
+    composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/map_realtime_progress_hud_screenshot.png")
+  }
 }

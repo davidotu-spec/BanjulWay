@@ -97,7 +97,8 @@ object FirestoreManager {
             "reviewComment" to trip.reviewComment,
             "reviewTags" to trip.reviewTags,
             "tipGmd" to trip.tipGmd,
-            "timestamp" to trip.timestamp
+            "timestamp" to trip.timestamp,
+            "commissionGmd" to trip.commissionGmd
         )
 
         val db = firestore
@@ -122,6 +123,59 @@ object FirestoreManager {
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Firestore security context/write error: ${e.localizedMessage}")
+            onComplete(false)
+        }
+    }
+
+    /**
+     * Stashes passenger driver rating feedback directly to the Firebase Firestore 'trip_ratings' collection.
+     */
+    fun saveTripRatingToFirestore(
+        tripId: String,
+        driverId: String,
+        driverName: String,
+        passengerName: String,
+        stars: Int,
+        reviewComment: String,
+        reviewTags: String,
+        tipGmd: Int,
+        onComplete: (Boolean) -> Unit
+    ) {
+        val ratingData = hashMapOf<String, Any?>(
+            "ratingId" to "rating_$tripId",
+            "tripId" to tripId,
+            "driverId" to driverId,
+            "driverName" to driverName,
+            "passengerName" to passengerName,
+            "stars" to stars,
+            "reviewComment" to reviewComment,
+            "reviewTags" to reviewTags,
+            "tipGmd" to tipGmd,
+            "timestamp" to System.currentTimeMillis()
+        )
+
+        val db = firestore
+        if (db == null) {
+            Log.w(TAG, "Simulating Local Firestore Save Rating Success for Document ID: rating_$tripId")
+            onComplete(true)
+            return
+        }
+
+        try {
+            Log.d(TAG, "Writing passenger rating to Firestore trip_ratings collection...")
+            db.collection("trip_ratings")
+                .document("rating_$tripId")
+                .set(ratingData)
+                .addOnSuccessListener {
+                    Log.i(TAG, "Firestore trip rating document written successfully")
+                    onComplete(true)
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Firestore write trip rating failed", e)
+                    onComplete(false)
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Firestore write trip rating error: ${e.localizedMessage}")
             onComplete(false)
         }
     }
@@ -231,6 +285,7 @@ object FirestoreManager {
                             val reviewTags = doc.getString("reviewTags") ?: ""
                             val tipGmd = doc.getLong("tipGmd")?.toInt() ?: 0
                             val timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis()
+                            val commissionGmd = doc.getLong("commissionGmd")?.toInt() ?: (fareGmd * 0.15).toInt()
 
                             tripsList.add(
                                 TripEntity(
@@ -253,7 +308,8 @@ object FirestoreManager {
                                     reviewComment = reviewComment,
                                     reviewTags = reviewTags,
                                     tipGmd = tipGmd,
-                                    timestamp = timestamp
+                                    timestamp = timestamp,
+                                    commissionGmd = commissionGmd
                                 )
                             )
                         } catch (e: Exception) {

@@ -120,9 +120,6 @@ fun SosEmergencyDialog(
                 alertLogs.add("📡 Precise Coords: ${String.format("%.5f", pLat)} N, ${String.format("%.5f", pLng)} W")
                 alertLogs.add("🚔 Local Patrol is being routed to your active GPS location!")
                 if (activeTripId != null) {
-                    alertLogs.add("🚨 SUCCESS: SOS Distress Signal broadcasted to $authorityName")
-                    alertLogs.add("📡 Precise Coords: ${String.format("%.5f", pLat)} N, ${String.format("%.5f", pLng)} W")
-                    alertLogs.add("🚔 Local Patrol is being routed to your active GPS location!")
                     alertLogs.add("📱 Linked active WayGo Ride Ref: $activeTripId")
                 }
             }

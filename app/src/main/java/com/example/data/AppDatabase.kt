@@ -16,9 +16,10 @@ import kotlinx.coroutines.launch
         TripEntity::class,
         SupportMessageEntity::class,
         ScheduledRideEntity::class,
-        SavedPlaceEntity::class
+        SavedPlaceEntity::class,
+        VehicleMileageEntity::class
     ],
-    version = 4,
+    version = 8,
     exportSchema = false
 )
 abstract class WayGoDatabase : RoomDatabase() {
@@ -68,7 +69,10 @@ abstract class WayGoDatabase : RoomDatabase() {
                     mobileMoneyNumber = "+220 384 5678",
                     savedHome = "Kairaba Avenue, Serrekunda",
                     savedWork = "Albert Market, Banjul",
-                    avatarIndex = 1
+                    avatarIndex = 1,
+                    isPaymentLinked = false,
+                    linkedCardLast4 = "",
+                    linkedPaymentEmail = ""
                 )
             )
 
@@ -230,6 +234,32 @@ abstract class WayGoDatabase : RoomDatabase() {
                     message = "Hello! Welcome to WayGo. How can we help you with your journey in Gambia today?",
                     status = "RESOLVED",
                     issueCategory = "Welcome"
+                )
+            )
+
+            // Seed initial vehicle mileage data for drivers
+            dao.insertOrUpdateVehicleMileage(
+                VehicleMileageEntity(
+                    driverId = "drv_alieu",
+                    currentMileage = 12450.0,
+                    lastOilChangeMileage = 10000.0,
+                    lastTireCheckMileage = 8000.0
+                )
+            )
+            dao.insertOrUpdateVehicleMileage(
+                VehicleMileageEntity(
+                    driverId = "drv_mariama",
+                    currentMileage = 4920.0,
+                    lastOilChangeMileage = 4000.0,
+                    lastTireCheckMileage = 3000.0
+                )
+            )
+            dao.insertOrUpdateVehicleMileage(
+                VehicleMileageEntity(
+                    driverId = "drv_bakary",
+                    currentMileage = 15300.0,
+                    lastOilChangeMileage = 12000.0,
+                    lastTireCheckMileage = 12000.0
                 )
             )
         }

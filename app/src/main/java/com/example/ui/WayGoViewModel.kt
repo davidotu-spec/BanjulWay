@@ -10,7 +10,31 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 
-class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
+enum class ThemeMode {
+    SYSTEM, LIGHT, DARK
+}
+
+class WayGoViewModel(
+    private val repository: WayGoRepository,
+    private val sharedPrefs: android.content.SharedPreferences? = null
+) : ViewModel() {
+
+    private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    init {
+        val savedTheme = sharedPrefs?.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
+        _themeMode.value = try {
+            ThemeMode.valueOf(savedTheme)
+        } catch (e: Exception) {
+            ThemeMode.SYSTEM
+        }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        sharedPrefs?.edit()?.putString("theme_mode", mode.name)?.apply()
+    }
 
     // General app states
     val userProfile = repository.userProfileFlow.stateIn(
@@ -65,6 +89,25 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
     private val _firestoreStatusMessage = MutableStateFlow<String?>(null)
     val firestoreStatusMessage: StateFlow<String?> = _firestoreStatusMessage.asStateFlow()
 
+    // Simulated Connection Quality states for offline local caching
+    private val _isConnectionPoor = MutableStateFlow(false)
+    val isConnectionPoor: StateFlow<Boolean> = _isConnectionPoor.asStateFlow()
+
+    private val _localCachingStatus = MutableStateFlow("All stats synced and cached locally in Room.")
+    val localCachingStatus: StateFlow<String> = _localCachingStatus.asStateFlow()
+
+    fun toggleConnectionQuality() {
+        _isConnectionPoor.value = !_isConnectionPoor.value
+        if (_isConnectionPoor.value) {
+            _localCachingStatus.value = "Poor connection. Using local Room database cached stats."
+            _firestoreStatusMessage.value = "Poor mobile data connection. Loading local cache..."
+        } else {
+            _localCachingStatus.value = "Connection restored. Syncing with Firestore Cloud."
+            _firestoreStatusMessage.value = "Connection restored. Syncing..."
+            refreshTripHistoryFromFirestore()
+        }
+    }
+
     // Broadcasting / Nearest Driver states
     private val _broadcastDrivers = MutableStateFlow<List<Pair<DriverEntity, Double>>>(emptyList())
     val broadcastDrivers: StateFlow<List<Pair<DriverEntity, Double>>> = _broadcastDrivers.asStateFlow()
@@ -96,9 +139,21 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
     private val _authError = MutableStateFlow("")
     val authError: StateFlow<String> = _authError.asStateFlow()
 
+    private val _verificationId = MutableStateFlow("")
+    val verificationId: StateFlow<String> = _verificationId.asStateFlow()
+
     // Active Driver Profile (for Driver Hub view)
     private val _activeDriverId = MutableStateFlow("drv_alieu")
     val activeDriverId: StateFlow<String> = _activeDriverId.asStateFlow()
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val activeDriverMileage = _activeDriverId.flatMapLatest { driverId ->
+        repository.getVehicleMileageFlow(driverId)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
 
     // Live Tracking Simulation States
     private val _simulationProgress = MutableStateFlow(0f) // 0.0 to 1.0
@@ -147,6 +202,8 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
         startIdleDriverMovement()
         // Automatically check and notify drivers on upcoming scheduled rides
         observeAndNotifyScheduledRides()
+        // Start mileage simulation and maintenance checker
+        startVehicleMileageSimulationAndReminders()
         // Fetch past ride history from Firestore on launch
         refreshTripHistoryFromFirestore()
     }
@@ -156,18 +213,29 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
             _firestoreIsLoading.value = true
             _firestoreStatusMessage.value = "Fetching past rides from Firestore Cloud..."
             try {
+                if (_isConnectionPoor.value) {
+                    delay(500)
+                    throw java.io.IOException("Poor mobile connection in Gambia region. Offline cache mode active.")
+                }
                 FirestoreManager.fetchTripHistoryFromFirestore { fetchedTrips ->
+                    viewModelScope.launch {
+                        fetchedTrips.forEach { trip ->
+                            repository.saveTrip(trip)
+                        }
+                    }
                     _firestoreTrips.value = fetchedTrips
                     _firestoreIsLoading.value = false
+                    _localCachingStatus.value = "All stats synced and cached locally in Room database."
                     if (fetchedTrips.isEmpty()) {
                         _firestoreStatusMessage.value = "No previous online rides found in Firestore. Showing local cache."
                     } else {
-                        _firestoreStatusMessage.value = "Fetched ${fetchedTrips.size} rides from Firestore Cloud!"
+                        _firestoreStatusMessage.value = "Fetched & cached ${fetchedTrips.size} rides from Firestore Cloud!"
                     }
                 }
             } catch (e: Exception) {
                 _firestoreIsLoading.value = false
                 _firestoreStatusMessage.value = "Cloud query failed: ${e.localizedMessage}"
+                _localCachingStatus.value = "Offline Fallback Active: stats loaded from local Room cache."
             }
         }
     }
@@ -323,34 +391,80 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
 
     // AUTH ACTIONS
     fun logout() {
+        FirebaseAuthManager.signOut()
         _isUserLoggedIn.value = false
         _otpRequested.value = false
         _generatedOtp.value = ""
+        _verificationId.value = ""
+        _authError.value = ""
     }
 
     fun sendOtp(phone: String) {
-        if (phone.isBlank() || phone.length < 5) {
+        requestOtp(null, phone)
+    }
+
+    fun requestOtp(activity: android.app.Activity?, phone: String) {
+        val cleanPhone = phone.trim()
+        if (cleanPhone.isBlank() || cleanPhone.length < 5) {
             _authError.value = "Please enter a valid phone number"
             return
         }
         _authError.value = ""
-        val randomOtp = (1000..9999).random().toString()
-        _generatedOtp.value = randomOtp
-        _otpRequested.value = true
+        
+        FirebaseAuthManager.verifyPhoneNumber(
+            activity = activity,
+            phoneNumber = cleanPhone,
+            onCodeSent = { verificationId, simulatedCode ->
+                _verificationId.value = verificationId
+                _generatedOtp.value = simulatedCode
+                _otpRequested.value = true
+                _authError.value = ""
+            },
+            onInstantVerification = {
+                _isUserLoggedIn.value = true
+                _authError.value = ""
+            },
+            onError = { errorMsg ->
+                _authError.value = errorMsg
+            }
+        )
     }
 
     fun verifyOtp(enteredCode: String) {
-        if (enteredCode == _generatedOtp.value || enteredCode == "1234" || enteredCode == "5581") {
-            _isUserLoggedIn.value = true
-            _authError.value = ""
-        } else {
-            _authError.value = "Incorrect code. Please check your SMS and try again."
+        val verId = _verificationId.value
+        if (verId.isBlank()) {
+            // Support legacy hardcoded flow fallback in case verificationId is empty
+            if (enteredCode == _generatedOtp.value || enteredCode == "1234" || enteredCode == "5581") {
+                _isUserLoggedIn.value = true
+                _authError.value = ""
+            } else {
+                _authError.value = "Incorrect code. Please check your SMS and try again."
+            }
+            return
         }
+        if (enteredCode.isBlank() || enteredCode.length < 4) {
+            _authError.value = "Please enter a valid verification code."
+            return
+        }
+        _authError.value = ""
+        
+        FirebaseAuthManager.signInWithCode(
+            verificationId = verId,
+            code = enteredCode,
+            onSuccess = {
+                _isUserLoggedIn.value = true
+                _authError.value = ""
+            },
+            onError = { errorMsg ->
+                _authError.value = errorMsg
+            }
+        )
     }
 
     // USER PROFILE
-    fun saveProfile(name: String, phone: String, email: String, gender: String, mobileMoney: String, savedHome: String, savedWork: String, avatarIndex: Int) {
+    fun saveProfile(name: String, phone: String, email: String, gender: String, mobileMoney: String, savedHome: String, savedWork: String, avatarIndex: Int, photoUri: String? = null) {
         viewModelScope.launch {
+            val current = userProfile.value
             repository.saveUserProfile(
                 UserProfileEntity(
                     id = "current_passenger",
@@ -361,9 +475,88 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
                     mobileMoneyNumber = mobileMoney,
                     savedHome = savedHome,
                     savedWork = savedWork,
-                    avatarIndex = avatarIndex
+                    avatarIndex = avatarIndex,
+                    photoUri = photoUri,
+                    isPaymentLinked = current?.isPaymentLinked ?: false,
+                    linkedCardLast4 = current?.linkedCardLast4 ?: "",
+                    linkedPaymentEmail = current?.linkedPaymentEmail ?: ""
                 )
             )
+
+            // Auto-synchronize Home saved place
+            if (savedHome.isNotBlank()) {
+                val homeMatch = GAMBIA_LOCATIONS.firstOrNull { it.name.equals(savedHome, ignoreCase = true) }
+                val lat = homeMatch?.lat ?: 13.4471
+                val lng = homeMatch?.lng ?: -16.6791
+                repository.deleteSavedPlacesByLabel("Home")
+                repository.saveSavedPlace(
+                    com.example.data.SavedPlaceEntity(
+                        name = savedHome,
+                        label = "Home",
+                        lat = lat,
+                        lng = lng,
+                        iconType = "HOME"
+                    )
+                )
+            }
+
+            // Auto-synchronize Work saved place
+            if (savedWork.isNotBlank()) {
+                val workMatch = GAMBIA_LOCATIONS.firstOrNull { it.name.equals(savedWork, ignoreCase = true) }
+                val lat = workMatch?.lat ?: 13.4533
+                val lng = workMatch?.lng ?: -16.5746
+                repository.deleteSavedPlacesByLabel("Work")
+                repository.saveSavedPlace(
+                    com.example.data.SavedPlaceEntity(
+                        name = savedWork,
+                        label = "Work",
+                        lat = lat,
+                        lng = lng,
+                        iconType = "WORK"
+                    )
+                )
+            }
+        }
+    }
+
+    fun linkPaymentMethod(email: String, cardLast4: String) {
+        viewModelScope.launch {
+            val current = userProfile.value
+            if (current != null) {
+                repository.saveUserProfile(
+                    current.copy(
+                        isPaymentLinked = true,
+                        linkedCardLast4 = cardLast4,
+                        linkedPaymentEmail = email
+                    )
+                )
+            } else {
+                repository.saveUserProfile(
+                    UserProfileEntity(
+                        id = "current_passenger",
+                        name = "David Otu",
+                        phone = "+220 771 2345",
+                        isPaymentLinked = true,
+                        linkedCardLast4 = cardLast4,
+                        linkedPaymentEmail = email
+                    )
+                )
+            }
+        }
+    }
+
+    fun removePaymentMethod() {
+        viewModelScope.launch {
+            val current = userProfile.value
+            if (current != null) {
+                repository.saveUserProfile(
+                    current.copy(
+                        isPaymentLinked = false,
+                        linkedCardLast4 = "",
+                        linkedPaymentEmail = ""
+                    )
+                )
+            }
         }
     }
 
@@ -443,6 +636,40 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
     }
 
     /**
+     * Finds the single nearest matching driver based on the user's selected pickup location and vehicle type.
+     * If no online approved driver is found in the vicinity, it spawns a simulated fallback driver
+     * to fulfill the matching request and ensure an offline-first high availability.
+     */
+    suspend fun findNearestMatchingDriver(
+        pickupLat: Double,
+        pickupLng: Double,
+        vehicleType: String,
+        maxDistanceKm: Double = 25.0
+    ): DriverEntity {
+        val nearestDrivers = getNearestAvailableDrivers(pickupLat, pickupLng, vehicleType, maxDistanceKm)
+        if (nearestDrivers.isNotEmpty()) {
+            return nearestDrivers.first().first
+        }
+
+        // Create a simulated matching driver in the database
+        val spawnedDriver = DriverEntity(
+            id = "drv_spawned_" + (1000..9999).random(),
+            name = listOf("Modou Barrow", "Ebrima Jallow", "Fatou Sarr", "Alieu Ceesay", "Binta Diallo", "Lamin Touray", "Samba Sanneh").random(),
+            phone = "+220 7" + (100000..999999).random(),
+            vehicleType = vehicleType,
+            vehiclePlate = "BJL " + (1000..9999).random() + " " + listOf("A", "B", "C", "D").random(),
+            rating = (45..50).random() / 10f,
+            approvalStatus = "APPROVED",
+            isOnline = true,
+            currentLat = pickupLat + (Random.nextDouble(-0.015, 0.015)),
+            currentLng = pickupLng + (Random.nextDouble(-0.015, 0.015)),
+            driverLicense = "DL-2026-gen"
+        )
+        repository.saveDriver(spawnedDriver)
+        return spawnedDriver
+    }
+
+    /**
      * Broadcasts a ride request to the nearest available drivers and updates matching status.
      */
     fun broadcastRideRequest(
@@ -455,36 +682,15 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
             _broadcastLogs.value = listOf("Initializing secure coordinate scan for $vehicleType...")
             delay(1200)
 
+            // Utilize our new matching logic function to find/ensure our matched driver
+            val matchedDriver = findNearestMatchingDriver(pLat, pLng, vehicleType, 25.0)
+            
+            // Get all nearby available drivers for broadcasting visual list
             val nearest = getNearestAvailableDrivers(pLat, pLng, vehicleType, 25.0)
             _broadcastDrivers.value = nearest
 
-            if (nearest.isEmpty()) {
-                _broadcastLogs.value = _broadcastLogs.value + "No drivers found in 25km. Spawning emergency nearby virtual responder..."
-                delay(1200)
-
-                val spawnedDriver = DriverEntity(
-                    id = "drv_spawned_" + (1000..9999).random(),
-                    name = listOf("Modou Barrow", "Ebrima Jallow", "Fatou Sarr", "Alieu Ceesay", "Binta Diallo").random(),
-                    phone = "+220 7" + (100000..999999).random(),
-                    vehicleType = vehicleType,
-                    vehiclePlate = "BJL " + (1000..9999).random() + " " + listOf("A", "B", "C", "D").random(),
-                    rating = (45..49).random() / 10f,
-                    approvalStatus = "APPROVED",
-                    isOnline = true,
-                    currentLat = pLat + (Random.nextDouble(-0.015, 0.015)),
-                    currentLng = pLng + (Random.nextDouble(-0.015, 0.015)),
-                    driverLicense = "DL-2026-gen"
-                )
-                repository.saveDriver(spawnedDriver)
-
-                val newNearest = getNearestAvailableDrivers(pLat, pLng, vehicleType, 25.0)
-                _broadcastDrivers.value = newNearest
-                val distStr = String.format("%.2f", calculateHaversineDistance(pLat, pLng, spawnedDriver.currentLat, spawnedDriver.currentLng))
-                _broadcastLogs.value = _broadcastLogs.value + "Spawned responder: ${spawnedDriver.name} at ${distStr}km"
-            } else {
-                val foundMsg = "Found ${nearest.size} eligible $vehicleType drivers nearby."
-                _broadcastLogs.value = _broadcastLogs.value + foundMsg
-            }
+            val foundMsg = "Matched nearest eligible $vehicleType driver nearby: ${matchedDriver.name}."
+            _broadcastLogs.value = _broadcastLogs.value + foundMsg
 
             val currentTrip = repository.getTripById(tripId)
 
@@ -506,22 +712,19 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
                 }
             }
 
-            // Auto accept by the nearest driver after pings
+            // Auto accept by the matched driver after pings
             delay(1200)
-            val selectedMatch = _broadcastDrivers.value.firstOrNull()?.first
-            if (selectedMatch != null) {
-                _broadcastLogs.value = _broadcastLogs.value + "Ride request matched. ${selectedMatch.name} is arriving!"
-                val currentTrip = repository.getTripById(tripId)
-                if (currentTrip != null && currentTrip.status == "REQUESTED") {
-                    val updatedTrip = currentTrip.copy(
-                        driverId = selectedMatch.id,
-                        driverName = selectedMatch.name,
-                        vehiclePlate = selectedMatch.vehiclePlate,
-                        vehicleType = selectedMatch.vehicleType
-                    )
-                    repository.saveTrip(updatedTrip)
-                    acceptBooking(tripId, selectedMatch.id)
-                }
+            _broadcastLogs.value = _broadcastLogs.value + "Ride request matched. ${matchedDriver.name} is arriving!"
+            val currentTripCheck = repository.getTripById(tripId)
+            if (currentTripCheck != null && currentTripCheck.status == "REQUESTED") {
+                val updatedTrip = currentTripCheck.copy(
+                    driverId = matchedDriver.id,
+                    driverName = matchedDriver.name,
+                    vehiclePlate = matchedDriver.vehiclePlate,
+                    vehicleType = matchedDriver.vehicleType
+                )
+                repository.saveTrip(updatedTrip)
+                acceptBooking(tripId, matchedDriver.id)
             } else {
                 _broadcastLogs.value = _broadcastLogs.value + "System matching timeout. Retrying backup routing..."
                 triggerAutonomousDriverAcceptance(tripId)
@@ -599,6 +802,58 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
 
             // Start visual simulation of driving
             startLiveTrackerSimulation(updatedTrip, driver)
+        }
+    }
+
+    fun setArrivedAtPickup(tripId: String, driverId: String) {
+        viewModelScope.launch {
+            simulationJob?.cancel()
+            val trip = repository.getTripById(tripId) ?: return@launch
+            val driver = repository.getDriverById(driverId) ?: return@launch
+
+            val updatedTrip = trip.copy(status = "ARRIVED")
+            repository.saveTrip(updatedTrip)
+            _simulatedDriverLat.value = trip.pickupLat
+            _simulatedDriverLng.value = trip.pickupLng
+            _simulationProgress.value = 0.38f
+            repository.updateDriverLocation(driver.id, trip.pickupLat, trip.pickupLng)
+        }
+    }
+
+    fun beginTransit(tripId: String, driverId: String) {
+        viewModelScope.launch {
+            simulationJob?.cancel()
+            val trip = repository.getTripById(tripId) ?: return@launch
+            val driver = repository.getDriverById(driverId) ?: return@launch
+
+            val updatedTrip = trip.copy(status = "EN_ROUTE")
+            repository.saveTrip(updatedTrip)
+            _simulationProgress.value = 0.5f
+        }
+    }
+
+    fun completeTrip(tripId: String, driverId: String) {
+        viewModelScope.launch {
+            simulationJob?.cancel()
+            val trip = repository.getTripById(tripId) ?: return@launch
+            val driver = repository.getDriverById(driverId) ?: return@launch
+
+            val calculatedCommission = (trip.fareGmd * 0.15).toInt()
+            val updatedTrip = trip.copy(
+                status = "COMPLETED",
+                commissionGmd = calculatedCommission
+            )
+            repository.saveTrip(updatedTrip)
+            _simulatedDriverLat.value = trip.dropoffLat
+            _simulatedDriverLng.value = trip.dropoffLng
+            _simulationProgress.value = 1.0f
+            repository.updateDriverLocation(driver.id, trip.dropoffLat, trip.dropoffLng)
+
+            // Sync updated trip details directly to Firestore
+            FirestoreManager.saveTripToFirestore(updatedTrip) { success ->
+                android.util.Log.d("WayGoViewModel", "Cloud Firestore trip sync status: $success")
+                refreshTripHistoryFromFirestore()
+            }
         }
     }
 
@@ -683,6 +938,76 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
         }
     }
 
+    // Shift Tracking & End-of-Shift Performance Summary States
+    private val _shiftStartTimes = mutableMapOf<String, Long>()
+    private val _endShiftSummary = MutableStateFlow<DailyPerformanceSummary?>(null)
+    val endShiftSummary: StateFlow<DailyPerformanceSummary?> = _endShiftSummary.asStateFlow()
+
+    fun clearShiftSummary() {
+        _endShiftSummary.value = null
+    }
+
+    fun triggerShiftSummaryForDriver(driverId: String) {
+        viewModelScope.launch {
+            val driver = repository.getDriverById(driverId) ?: return@launch
+            val completedTrips = repository.getTripsForDriver(driverId).filter { it.status == "COMPLETED" }
+
+            val startTime = _shiftStartTimes[driverId] ?: (System.currentTimeMillis() - (5 * 3600 * 1000 + 15 * 60 * 1000))
+            val durationHours = ((System.currentTimeMillis() - startTime) / 3600000.0).coerceAtLeast(0.5)
+
+            val totalFare = completedTrips.sumOf { it.fareGmd }
+            val totalTips = completedTrips.sumOf { it.tipGmd }
+            val totalRevenue = if (totalFare > 0) totalFare + totalTips else 1850
+
+            // Hourly earnings breakdown
+            val hourlyMap = mutableMapOf(
+                "08:00" to 250,
+                "10:00" to 320,
+                "12:00" to 280,
+                "14:00" to 550,
+                "16:00" to 300,
+                "18:00" to 150
+            )
+
+            if (completedTrips.isNotEmpty()) {
+                val cal = java.util.Calendar.getInstance()
+                completedTrips.forEach { trip ->
+                    cal.timeInMillis = trip.timestamp
+                    val hour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                    val label = String.format("%02d:00", (hour / 2) * 2)
+                    hourlyMap[label] = (hourlyMap[label] ?: 0) + trip.fareGmd + trip.tipGmd
+                }
+            }
+
+            val maxEntry = hourlyMap.maxByOrNull { it.value }
+            val topHourLabel = maxEntry?.key ?: "14:00"
+            val topHourStart = topHourLabel.take(2).toIntOrNull() ?: 14
+            val topHourEnd = String.format("%02d:00", topHourStart + 2)
+            val topEarningText = "$topHourLabel - $topHourEnd (GMD ${maxEntry?.value ?: 850})"
+
+            val breakdown = hourlyMap.map { (label, amount) ->
+                HourlyEarningData(
+                    hourLabel = label,
+                    earningsGmd = amount,
+                    isTopHour = label == topHourLabel
+                )
+            }.sortedBy { it.hourLabel }
+
+            _endShiftSummary.value = DailyPerformanceSummary(
+                driverId = driverId,
+                driverName = driver.name,
+                totalHoursDriven = Math.round(durationHours * 10.0) / 10.0,
+                totalTripsCompleted = if (completedTrips.isNotEmpty()) completedTrips.size else 8,
+                totalEarningsGmd = totalRevenue,
+                topEarningHours = topEarningText,
+                totalTipsGmd = if (totalTips > 0) totalTips else 250,
+                acceptanceRatePercent = 96,
+                averageRating = driver.rating,
+                hourlyBreakdown = breakdown
+            )
+        }
+    }
+
     fun submitRating(tripId: String, stars: Int, comment: String, selectedTags: List<String>, tipGmd: Int = 0) {
         viewModelScope.launch {
             val tagStr = selectedTags.joinToString(", ")
@@ -702,13 +1027,33 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
                 android.util.Log.d("WayGoViewModel", "Cloud Firestore trip sync status: $success")
                 refreshTripHistoryFromFirestore()
             }
+
+            // Stash passenger rating directly to Firestore trip_ratings collection
+            FirestoreManager.saveTripRatingToFirestore(
+                tripId = tripId,
+                driverId = driverId,
+                driverName = driver.name,
+                passengerName = trip.passengerName,
+                stars = stars,
+                reviewComment = comment,
+                reviewTags = tagStr,
+                tipGmd = tipGmd
+            ) { success ->
+                android.util.Log.d("WayGoViewModel", "Cloud Firestore rating collection sync status: $success")
+            }
         }
     }
 
     // DRIVER CONTROLS
     fun toggleDriverOnlineState(driverId: String, isOnline: Boolean) {
         viewModelScope.launch {
+            if (isOnline) {
+                _shiftStartTimes[driverId] = System.currentTimeMillis()
+            }
             repository.updateDriverOnlineStatus(driverId, isOnline)
+            if (!isOnline) {
+                triggerShiftSummaryForDriver(driverId)
+            }
         }
     }
 
@@ -966,17 +1311,155 @@ class WayGoViewModel(private val repository: WayGoRepository) : ViewModel() {
         }
     }
 
+    private val _payoutState = MutableStateFlow<PayoutState>(PayoutState.Idle)
+    val payoutState: StateFlow<PayoutState> = _payoutState.asStateFlow()
+
+    fun requestWeeklyPayout(driverId: String, provider: String, phone: String, gross: Int, commission: Int, net: Int) {
+        viewModelScope.launch {
+            _payoutState.value = PayoutState.Loading
+            try {
+                // Simulate disbursement gateway API call with mock network latency
+                delay(1800)
+                val referenceId = "PAY-FLW-" + (100000 + Random.nextInt(900000)).toString() + "-" + provider.take(3).uppercase()
+                _payoutState.value = PayoutState.Success(
+                    refId = referenceId,
+                    provider = provider,
+                    amount = net,
+                    gross = gross,
+                    commission = commission
+                )
+            } catch (e: Exception) {
+                _payoutState.value = PayoutState.Error("Gateway preparation failed: " + e.localizedMessage)
+            }
+        }
+    }
+
+    fun resetPayoutState() {
+        _payoutState.value = PayoutState.Idle
+    }
+
+    fun updateDriverLocation(driverId: String, lat: Double, lng: Double) {
+        viewModelScope.launch {
+            repository.updateDriverLocation(driverId, lat, lng)
+        }
+    }
+
+    // VEHICLE MILEAGE & MAINTENANCE SYSTEM
+    fun updateVehicleMileage(driverId: String, newMileage: Double) {
+        viewModelScope.launch {
+            val existing = repository.getVehicleMileage(driverId) ?: VehicleMileageEntity(driverId = driverId)
+            val updated = existing.copy(currentMileage = newMileage)
+            repository.saveVehicleMileage(updated)
+            checkAndTriggerMaintenanceReminders(updated)
+        }
+    }
+
+    fun resetOilChange(driverId: String) {
+        viewModelScope.launch {
+            val existing = repository.getVehicleMileage(driverId) ?: VehicleMileageEntity(driverId = driverId)
+            val updated = existing.copy(
+                lastOilChangeMileage = existing.currentMileage,
+                lastNotifiedOilChange = existing.currentMileage
+            )
+            repository.saveVehicleMileage(updated)
+        }
+    }
+
+    fun resetTireCheck(driverId: String) {
+        viewModelScope.launch {
+            val existing = repository.getVehicleMileage(driverId) ?: VehicleMileageEntity(driverId = driverId)
+            val updated = existing.copy(
+                lastTireCheckMileage = existing.currentMileage,
+                lastNotifiedTireCheck = existing.currentMileage
+            )
+            repository.saveVehicleMileage(updated)
+        }
+    }
+
+    fun toggleSimulatedMileage(driverId: String, isSimulating: Boolean) {
+        viewModelScope.launch {
+            val existing = repository.getVehicleMileage(driverId) ?: VehicleMileageEntity(driverId = driverId)
+            val updated = existing.copy(isSimulatingMileage = isSimulating)
+            repository.saveVehicleMileage(updated)
+        }
+    }
+
+    private fun checkAndTriggerMaintenanceReminders(mileage: VehicleMileageEntity) {
+        val current = mileage.currentMileage
+        val driverId = mileage.driverId
+
+        // Oil change check
+        val drivenSinceOil = current - mileage.lastOilChangeMileage
+        if (drivenSinceOil >= mileage.oilChangeInterval && current - mileage.lastNotifiedOilChange >= 100.0) {
+            viewModelScope.launch {
+                val driver = repository.getDriverById(driverId)
+                if (driver != null) {
+                    triggerDriverPushNotification(
+                        driverId = driverId,
+                        driverName = driver.name,
+                        title = "⚠️ ROUTINE OIL CHANGE REQUIRED",
+                        message = "Your vehicle has driven ${drivenSinceOil.toInt()} km since your last oil change. To keep your engine performing perfectly, please schedule an oil change soon!"
+                    )
+                    val updated = mileage.copy(lastNotifiedOilChange = current)
+                    repository.saveVehicleMileage(updated)
+                }
+            }
+        }
+
+        // Tire check check
+        val drivenSinceTire = current - mileage.lastTireCheckMileage
+        if (drivenSinceTire >= mileage.tireCheckInterval && current - mileage.lastNotifiedTireCheck >= 100.0) {
+            viewModelScope.launch {
+                val driver = repository.getDriverById(driverId)
+                if (driver != null) {
+                    triggerDriverPushNotification(
+                        driverId = driverId,
+                        driverName = driver.name,
+                        title = "⚠️ VEHICLE TIRE ROTATION & CHECK DUE",
+                        message = "Your vehicle has covered ${drivenSinceTire.toInt()} km since your last tire inspection. Check tyre pressure and rotate tyres to ensure safety."
+                    )
+                    val updated = mileage.copy(lastNotifiedTireCheck = current)
+                    repository.saveVehicleMileage(updated)
+                }
+            }
+        }
+    }
+
+    private fun startVehicleMileageSimulationAndReminders() {
+        viewModelScope.launch {
+            while (true) {
+                delay(10000) // Run check every 10 seconds
+                val driverId = _activeDriverId.value
+                val mileage = repository.getVehicleMileage(driverId) ?: VehicleMileageEntity(driverId = driverId)
+                
+                if (mileage.isSimulatingMileage) {
+                    // Accumulate some simulated driving mileage
+                    val delta = 25.0 + Random.nextDouble() * 15.0 // Accumulate 25 to 40 km per interval to see quick alerts
+                    val updated = mileage.copy(currentMileage = mileage.currentMileage + delta)
+                    repository.saveVehicleMileage(updated)
+                    checkAndTriggerMaintenanceReminders(updated)
+                } else {
+                    // Just do a safety check on current mileage
+                    checkAndTriggerMaintenanceReminders(mileage)
+                }
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         chatListenerReg?.remove()
     }
 }
 
-class WayGoViewModelFactory(private val repository: WayGoRepository) : ViewModelProvider.Factory {
+class WayGoViewModelFactory(
+    private val repository: WayGoRepository,
+    private val sharedPreferences: android.content.SharedPreferences? = null
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(WayGoViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return WayGoViewModel(repository) as T
+            return WayGoViewModel(repository, sharedPreferences) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
@@ -992,3 +1475,17 @@ data class PushNotification(
     val payload: TripEntity? = null,
     var isRead: Boolean = false
 )
+
+sealed class PayoutState {
+    object Idle : PayoutState()
+    object Loading : PayoutState()
+    data class Success(
+        val refId: String,
+        val provider: String,
+        val amount: Int,
+        val gross: Int,
+        val commission: Int
+    ) : PayoutState()
+    data class Error(val message: String) : PayoutState()
+}
+

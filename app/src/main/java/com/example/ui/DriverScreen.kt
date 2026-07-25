@@ -2,6 +2,7 @@ package com.example.ui
 
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +25,20 @@ import com.example.data.DriverEntity
 import com.example.data.TripEntity
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.PointMode
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,11 +51,38 @@ fun DriverScreen(
     val trips by viewModel.allTrips.collectAsState()
     val scheduledRides by viewModel.allScheduledRides.collectAsState()
     val notifications by viewModel.driverNotifications.collectAsState()
+    val payoutState by viewModel.payoutState.collectAsState()
+    val activeDriverMileage by viewModel.activeDriverMileage.collectAsState()
+    val endShiftSummary by viewModel.endShiftSummary.collectAsState()
+
+    val isDark = MaterialTheme.colorScheme.background == BrandBlueDark
+
+    if (endShiftSummary != null) {
+        DailyPerformanceSummaryModal(
+            summary = endShiftSummary!!,
+            onDismiss = { viewModel.clearShiftSummary() },
+            isDark = isDark
+        )
+    }
 
     var showOnboardingForm by remember { mutableStateOf(false) }
+    var showRequestPayoutDialog by remember { mutableStateOf(false) }
+
+    // Dynamic system battery observation with tester simulator override state
+    val (systemBatteryLevel, systemIsCharging) = rememberBatteryState()
+    var simulatedBatteryLevel by remember { mutableStateOf<Int?>(null) }
+    val batteryLevel = simulatedBatteryLevel ?: systemBatteryLevel
+    val isCharging = systemIsCharging
 
     // Find the currently active driver object
     val currentDriver = drivers.firstOrNull { it.id == activeDriverId } ?: drivers.firstOrNull()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val cardBg = if (isDark) Color(0xFF1E293B) else PureWhite
+    val textPrimary = if (isDark) PureWhite else BrandBlueDark
+    val textSecondary = if (isDark) Color(0xFF94A3B8) else NeutralGray
+    val appBg = if (isDark) Color(0xFF0F172A) else BrandBlueLight
+    val borderCol = if (isDark) Color(0xFF334155) else Color.LightGray.copy(alpha = 0.3f)
 
     // Local subscription state
     var hasActiveSubscription by remember { mutableStateOf(true) }
@@ -49,6 +91,59 @@ fun DriverScreen(
     // Wallet Cash-out dialog state
     var showCashOutDialog by remember { mutableStateOf(false) }
     var isCashingOutDone by remember { mutableStateOf(false) }
+
+    // Visual demand surge alert notification state
+    var activeSurgeEvent by remember { mutableStateOf<DemandSurgeEvent?>(null) }
+
+    // Automated demand surge simulation engine
+    LaunchedEffect(currentDriver?.isOnline, currentDriver?.id) {
+        if (currentDriver?.isOnline == true && currentDriver != null) {
+            // Wait 15 seconds before triggering first simulated surge to avoid overwhelming on launch
+            delay(15000L)
+            while (true) {
+                if (activeSurgeEvent == null) {
+                    val isBanjul = kotlin.random.Random.nextBoolean()
+                    val newEvent = if (isBanjul) {
+                        DemandSurgeEvent(
+                            id = "surge_" + System.currentTimeMillis().toString().takeLast(5),
+                            zoneName = "Banjul City",
+                            region = "BANJUL",
+                            surgeMultiplier = 1.4 + (kotlin.random.Random.nextDouble() * 0.3).let { (it * 10).roundToInt() / 10.0 },
+                            description = "Ferry port congestion has caused passenger queuing. Commuters seeking immediate transport back to Serekunda.",
+                            hotspotName = "Banjul Ferry Port",
+                            lat = 13.4510,
+                            lng = -16.5680,
+                            potentialEarningsGmd = 80 + kotlin.random.Random.nextInt(5) * 20
+                        )
+                    } else {
+                        DemandSurgeEvent(
+                            id = "surge_" + System.currentTimeMillis().toString().takeLast(5),
+                            zoneName = "Kanifing Area",
+                            region = "KANIFING",
+                            surgeMultiplier = 1.5 + (kotlin.random.Random.nextDouble() * 0.4).let { (it * 10).roundToInt() / 10.0 },
+                            description = "Serekunda Market midday peak hour and Senegambia Strip nightlife crowds looking for urgent rides.",
+                            hotspotName = "Serekunda Market",
+                            lat = 13.4382,
+                            lng = -16.6780,
+                            potentialEarningsGmd = 120 + kotlin.random.Random.nextInt(5) * 20
+                        )
+                    }
+                    activeSurgeEvent = newEvent
+                    // Also trigger a system-wide push notification overlay for complete integration!
+                    viewModel.triggerDriverPushNotification(
+                        driverId = currentDriver.id,
+                        driverName = currentDriver.name,
+                        title = "🔥 HIGH DEMAND SURGE DETECTED",
+                        message = "${newEvent.zoneName} has an active surge: ${newEvent.surgeMultiplier}x fare potential!"
+                    )
+                }
+                // Wait 45 seconds before trying to trigger next simulated surge
+                delay(45000L)
+            }
+        } else {
+            activeSurgeEvent = null
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -84,19 +179,65 @@ fun DriverScreen(
                             )
                             Text(
                                 text = "Driver Hub",
-                                color = NeutralGray,
+                                color = textSecondary,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
                             )
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = PureWhite),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = cardBg),
                 actions = {
+                    AssistChip(
+                        onClick = { viewModel.setRole("PASSENGER") },
+                        label = { Text("Passenger", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        leadingIcon = {
+                            Icon(Icons.Default.DirectionsCar, contentDescription = "Passenger", modifier = Modifier.size(14.dp))
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = BrandBlueLight,
+                            labelColor = BrandBluePrimary,
+                            leadingIconContentColor = BrandBluePrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .testTag("driver_switch_passenger_chip")
+                    )
+
+                    val themeMode by viewModel.themeMode.collectAsState()
+                    IconButton(
+                        onClick = {
+                            val nextMode = if (themeMode == ThemeMode.DARK) ThemeMode.LIGHT else ThemeMode.DARK
+                            viewModel.setThemeMode(nextMode)
+                        },
+                        modifier = Modifier.testTag("driver_topbar_theme_toggle")
+                    ) {
+                        Icon(
+                            imageVector = if (themeMode == ThemeMode.DARK) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = "Toggle Theme",
+                            tint = if (themeMode == ThemeMode.DARK) AccentAmber else BrandBluePrimary
+                        )
+                    }
+
+                    // Battery-level indicator to help drivers plan their shifts
+                    BatteryLevelIndicatorCompact(
+                        level = batteryLevel,
+                        isCharging = isCharging,
+                        onClick = {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Battery: $batteryLevel% (${if (isCharging) "Charging" else "${batteryLevel / 12} hrs shift left"})",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        },
+                        modifier = Modifier.padding(end = 4.dp).testTag("battery_indicator_compact")
+                    )
+
                     // Let user switch driver perspective dynamically to inspect different vehicles!
                     var showDriverSwitchMenu by remember { mutableStateOf(false) }
                     IconButton(onClick = { showDriverSwitchMenu = true }) {
-                        Icon(Icons.Default.Cached, contentDescription = "Switch Driver", tint = BrandBlueDark)
+                        Icon(Icons.Default.Cached, contentDescription = "Switch Driver", tint = textPrimary)
                     }
                     DropdownMenu(
                         expanded = showDriverSwitchMenu,
@@ -187,7 +328,7 @@ fun DriverScreen(
             modifier = modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .background(BrandBlueLight)
+                .background(appBg)
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -200,7 +341,7 @@ fun DriverScreen(
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = PureWhite),
+                        colors = CardDefaults.cardColors(containerColor = cardBg),
                         shape = RoundedCornerShape(16.dp),
                         elevation = CardDefaults.cardElevation(2.dp)
                     ) {
@@ -215,7 +356,7 @@ fun DriverScreen(
                                         text = currentDriver.name,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 18.sp,
-                                        color = BrandBlueDark
+                                        color = textPrimary
                                     )
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
@@ -228,37 +369,101 @@ fun DriverScreen(
                                         Text(
                                             text = "${if (currentDriver.vehicleType == "CAR") "Yellow Cab" else "Tricycle (Tuk)"} • ${currentDriver.vehiclePlate}",
                                             fontSize = 12.sp,
-                                            color = NeutralGray
+                                            color = textSecondary
                                         )
                                     }
                                 }
 
-                                // Interactive Online toggle
-                                val onlineColor = if (currentDriver.isOnline) SuccessGreen else NeutralGray
+                                // Beautiful Interactive Switch for Active / Offline status
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(onlineColor.copy(alpha = 0.15f))
-                                        .clickable {
-                                            viewModel.toggleDriverOnlineState(currentDriver.id, !currentDriver.isOnline)
-                                        }
-                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(onlineColor)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (currentDriver.isOnline) "ONLINE" else "OFFLINE",
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 11.sp,
-                                        color = onlineColor
+                                        text = if (currentDriver.isOnline) "Active" else "Offline",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = if (currentDriver.isOnline) SuccessGreen else NeutralGray
+                                    )
+                                    Switch(
+                                        checked = currentDriver.isOnline,
+                                        onCheckedChange = { isChecked ->
+                                            viewModel.toggleDriverOnlineState(currentDriver.id, isChecked)
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = Color.White,
+                                            checkedTrackColor = SuccessGreen,
+                                            uncheckedThumbColor = Color.White,
+                                            uncheckedTrackColor = Color.LightGray
+                                        ),
+                                        modifier = Modifier.testTag("driver_online_switch")
                                     )
                                 }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // Availability Status Indicator Card
+                            Card(
+                                modifier = Modifier.fillMaxWidth().testTag("driver_availability_banner"),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (currentDriver.isOnline) SuccessGreen.copy(alpha = 0.08f) else Color.LightGray.copy(alpha = 0.15f)
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (currentDriver.isOnline) Icons.Default.CheckCircle else Icons.Default.DoNotDisturbOn,
+                                        contentDescription = "Status Icon",
+                                        tint = if (currentDriver.isOnline) SuccessGreen else NeutralGray,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = if (currentDriver.isOnline) "You are Active & Available" else "You are currently Offline",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = BrandBlueDark
+                                        )
+                                        Text(
+                                            text = if (currentDriver.isOnline) {
+                                                "You will receive live ride requests matching your ${if (currentDriver.vehicleType == "CAR") "Yellow Cab" else "Tricycle"}."
+                                            } else {
+                                                "Set yourself to Active to start receiving passenger bookings."
+                                            },
+                                            fontSize = 11.sp,
+                                            color = BrandBlueDark.copy(alpha = 0.8f)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Quick Shift Summary Action Row
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.triggerShiftSummaryForDriver(currentDriver.id)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(38.dp)
+                                    .testTag("btn_trigger_shift_summary"),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = BrandBlueSecondary),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BrandBlueSecondary.copy(alpha = 0.3f)),
+                                contentPadding = PaddingValues(horizontal = 10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.TrendingUp,
+                                    contentDescription = "Shift Summary",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("View Daily Shift Performance Summary", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                             }
 
                             Spacer(modifier = Modifier.height(12.dp))
@@ -298,6 +503,78 @@ fun DriverScreen(
                             }
                         }
                     }
+                }
+
+                // Live Demand Surge visual notification banner/alert
+                activeSurgeEvent?.let { surge ->
+                    item {
+                        DemandSurgeNotificationCard(
+                            event = surge,
+                            isDark = isDark,
+                            onNavigate = { event ->
+                                viewModel.updateDriverLocation(currentDriver.id, event.lat, event.lng)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "GPS routed to ${event.hotspotName}! Commencing navigation to ${event.zoneName} surge zone.",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                                activeSurgeEvent = null
+                            },
+                            onDismiss = {
+                                activeSurgeEvent = null
+                            }
+                        )
+                    }
+                }
+
+                // Vehicle Mileage & Maintenance Widget
+                item {
+                    VehicleMileageMaintenanceWidget(
+                        mileage = activeDriverMileage,
+                        driverId = activeDriverId,
+                        onUpdateMileage = { drvId, newMileage ->
+                            viewModel.updateVehicleMileage(drvId, newMileage)
+                        },
+                        onResetOil = { drvId ->
+                            viewModel.resetOilChange(drvId)
+                        },
+                        onResetTire = { drvId ->
+                            viewModel.resetTireCheck(drvId)
+                        },
+                        onToggleSimulating = { drvId, isSimulating ->
+                            viewModel.toggleSimulatedMileage(drvId, isSimulating)
+                        },
+                        isDark = isDark
+                    )
+                }
+
+                // Dynamic Battery & Shift Optimizer Widget
+                item {
+                    BatteryLevelDashboardWidget(
+                        level = batteryLevel,
+                        isCharging = isCharging,
+                        onSimulateBattery = { newLevel ->
+                            simulatedBatteryLevel = newLevel
+                        },
+                        onNavigateToHub = { hub ->
+                            android.widget.Toast.makeText(
+                                context,
+                                "Routing to ${hub.name} (${hub.distanceKm}km) in ${hub.location}!",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    )
+                }
+
+                // Dynamic Night Shift & Ergonomics Widget
+                item {
+                    val themeMode by viewModel.themeMode.collectAsState()
+                    NightShiftErgonomicsWidget(
+                        themeMode = themeMode,
+                        onThemeChange = { mode ->
+                            viewModel.setThemeMode(mode)
+                        }
+                    )
                 }
 
                 // SUB STATUS / PENDING ADMIN REVIEW NOTICE
@@ -529,6 +806,48 @@ fun DriverScreen(
                     val netEarningsForTimeframe = (totalFares - platformCommission) + totalTips
                     val successfulTripsCount = activeTripsSubset.size
 
+                    // Explicit current week calculations for the detailed breakdown
+                    val weeklyFares = weeklyTrips.sumOf { it.fareGmd }
+                    val weeklyTipsVal = weeklyTrips.sumOf { it.tipGmd }
+                    val weeklyGross = weeklyFares + weeklyTipsVal
+                    val weeklyCommission = (weeklyFares * 0.15).toInt()
+                    val weeklyNetPayout = (weeklyFares - weeklyCommission) + weeklyTipsVal
+                    val weeklyTripsCount = weeklyTrips.size
+
+                    // Compute last 7 days of earnings dynamically for the line chart (Recharts style)
+                    val last7DaysData = remember(driverCompletedTrips) {
+                        val list = mutableListOf<DayEarnings>()
+                        val sdf = java.text.SimpleDateFormat("EEE", java.util.Locale.getDefault())
+                        
+                        // We want chronological order from 6 days ago up to today
+                        for (i in 6 downTo 0) {
+                            val dCal = java.util.Calendar.getInstance()
+                            dCal.add(java.util.Calendar.DAY_OF_YEAR, -i)
+                            
+                            // Start of day
+                            dCal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                            dCal.set(java.util.Calendar.MINUTE, 0)
+                            dCal.set(java.util.Calendar.SECOND, 0)
+                            dCal.set(java.util.Calendar.MILLISECOND, 0)
+                            val dayStart = dCal.timeInMillis
+                            
+                            // End of day
+                            val dayEnd = dayStart + (24 * 60 * 60 * 1000 - 1)
+                            
+                            val label = sdf.format(dCal.time)
+                            
+                            // Compute net earnings
+                            val dayTrips = driverCompletedTrips.filter { it.timestamp in dayStart..dayEnd }
+                            val dayFares = dayTrips.sumOf { it.fareGmd }
+                            val dayTips = dayTrips.sumOf { it.tipGmd }
+                            val dayCommission = (dayFares * 0.15).toInt()
+                            val dayNet = (dayFares - dayCommission) + dayTips
+                            
+                            list.add(DayEarnings(label = label, amount = dayNet, timestamp = dayStart))
+                        }
+                        list
+                    }
+
                     // Total available balance to Cash Out (All-time net completed trips)
                     val totalFaresAllTime = driverCompletedTrips.sumOf { it.fareGmd }
                     val totalTipsAllTime = driverCompletedTrips.sumOf { it.tipGmd }
@@ -600,6 +919,77 @@ fun DriverScreen(
                                         text = if (selectedTimeframe == "DAILY") "Today" else "7 Days",
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            // Connection Quality & Local Caching Controller
+                            val isConnectionPoor by viewModel.isConnectionPoor.collectAsState()
+                            val localCachingStatus by viewModel.localCachingStatus.collectAsState()
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isConnectionPoor) ErrorRed.copy(alpha = 0.08f) else SuccessGreen.copy(alpha = 0.05f))
+                                    .border(
+                                        1.dp,
+                                        if (isConnectionPoor) ErrorRed.copy(alpha = 0.2f) else SuccessGreen.copy(alpha = 0.15f),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .padding(8.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isConnectionPoor) Icons.Default.WifiOff else Icons.Default.Wifi,
+                                                contentDescription = "Connection State",
+                                                tint = if (isConnectionPoor) ErrorRed else SuccessGreen,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Text(
+                                                text = if (isConnectionPoor) "Poor Connection Fallback Active" else "Connected to WayGo Cloud",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isConnectionPoor) ErrorRed else BrandBlueDark
+                                            )
+                                        }
+
+                                        // Simulate poor connection toggle button
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(if (isConnectionPoor) ErrorRed.copy(alpha = 0.15f) else BrandBlueLight)
+                                                .clickable { viewModel.toggleConnectionQuality() }
+                                                .padding(horizontal = 6.dp, vertical = 3.dp)
+                                                .testTag("toggle_network_poor_btn")
+                                        ) {
+                                            Text(
+                                                text = if (isConnectionPoor) "Poor Connection ON" else "Simulate Poor Connection",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isConnectionPoor) ErrorRed else BrandBluePrimary
+                                            )
+                                        }
+                                    }
+                                    
+                                    Text(
+                                        text = localCachingStatus,
+                                        fontSize = 10.sp,
+                                        color = NeutralGray,
+                                        fontWeight = FontWeight.Medium
                                     )
                                 }
                             }
@@ -706,6 +1096,166 @@ fun DriverScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
+                            // Detailed Weekly Earnings Breakdown (Gross, 15% Commission, and Net Payout)
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("weekly_detailed_breakdown_card")
+                                    .padding(bottom = 16.dp),
+                                colors = CardDefaults.cardColors(containerColor = BrandBlueLight.copy(alpha = 0.4f)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.15f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.AccountBalanceWallet,
+                                                contentDescription = "Wallet Icon",
+                                                tint = BrandBluePrimary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Current Week's Payout Breakdown",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = BrandBlueDark
+                                            )
+                                        }
+                                        
+                                        Badge(
+                                            containerColor = BrandBluePrimary,
+                                            contentColor = Color.White
+                                        ) {
+                                            Text(
+                                                text = "15% PLATFORM FEE",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 9.sp,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    
+                                    // Row 1: Gross Weekly Ride Fares
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("Gross Weekly Ride Fares", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BrandBlueDark)
+                                            Text("Sum of passenger base fares (excluding tips)", fontSize = 9.sp, color = NeutralGray)
+                                        }
+                                        Text(
+                                            text = "${weeklyFares} GMD",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = BrandBlueDark,
+                                            modifier = Modifier.testTag("weekly_gross_fares_val")
+                                        )
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    // Row 2: 15% Platform Commission
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("WayGo Commission Deduction (15%)", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ErrorRed)
+                                            Text("Flat service fee per completed booking", fontSize = 9.sp, color = NeutralGray)
+                                        }
+                                        Text(
+                                            text = "-${weeklyCommission} GMD",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = ErrorRed,
+                                            modifier = Modifier.testTag("weekly_commission_val")
+                                        )
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    // Row 3: Tips
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("Passenger Tips (Keep 100%)", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = SuccessGreen)
+                                            Text("Tips from completed rides this week", fontSize = 9.sp, color = NeutralGray)
+                                        }
+                                        Text(
+                                            text = "+${weeklyTipsVal} GMD",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = SuccessGreen,
+                                            modifier = Modifier.testTag("weekly_tips_val")
+                                        )
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    HorizontalDivider(color = BrandBluePrimary.copy(alpha = 0.2f), thickness = 1.dp)
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    
+                                    // Row 4: Net Weekly Payout
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("Net Payout Ready for Cash Out", fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, color = BrandBlueDark)
+                                            Text("Payout ready for Africell/Wave Mobile Money", fontSize = 9.sp, color = NeutralGray)
+                                        }
+                                        Text(
+                                            text = "${weeklyNetPayout} GMD",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 14.sp,
+                                            color = SuccessGreen,
+                                            modifier = Modifier.testTag("weekly_net_payout_val")
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Weekly Earnings Trend Line Chart (Visual progression over last 7 days - Recharts Style)
+                            WeeklyEarningsTrendChart(
+                                data = last7DaysData,
+                                modifier = Modifier.padding(bottom = 16.dp)
+                            )
+
+                            // Interactive Hotspots Map Preview with live demand indicators
+                            HotspotMapPreview(
+                                modifier = Modifier.padding(bottom = 16.dp),
+                                onNavigateToHotspot = { hotspot ->
+                                    if (currentDriver != null) {
+                                        viewModel.updateDriverLocation(currentDriver.id, hotspot.lat, hotspot.lng)
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "GPS simulated to ${hotspot.name}! Awaiting bookings in ${hotspot.region}.",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            )
+
                             // Regional breakdown
                             Text(
                                 text = "Regional Tracking (Banjul & Kanifing)",
@@ -799,22 +1349,18 @@ fun DriverScreen(
                                         .background(Color.LightGray.copy(alpha = 0.3f))
                                 ) {
                                     if (totalGmd > 0f) {
-                                        if (banjulRatio > 0f) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxHeight()
-                                                    .weight(banjulRatio.coerceAtLeast(0.01f))
-                                                    .background(BrandBlueSecondary)
-                                            )
-                                        }
-                                        if (kanifingRatio > 0f) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxHeight()
-                                                    .weight(kanifingRatio.coerceAtLeast(0.01f))
-                                                    .background(SuccessGreen)
-                                            )
-                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .weight(banjulRatio)
+                                                .background(BrandBlueSecondary)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .weight(kanifingRatio)
+                                                .background(SuccessGreen)
+                                        )
                                     } else {
                                         Box(
                                             modifier = Modifier
@@ -841,6 +1387,272 @@ fun DriverScreen(
                                         color = SuccessGreen,
                                         fontWeight = FontWeight.SemiBold
                                     )
+                                }
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), thickness = 1.dp, color = Color.LightGray.copy(alpha = 0.3f))
+
+                                Text(
+                                    text = "DEMO SURGE CONTROLS",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    color = NeutralGray,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            val newEvent = DemandSurgeEvent(
+                                                id = "surge_manual_banjul_" + System.currentTimeMillis().toString().takeLast(4),
+                                                zoneName = "Banjul City",
+                                                region = "BANJUL",
+                                                surgeMultiplier = 1.5,
+                                                description = "Simulated high passenger volume at Banjul Ferry Terminal. Commuters waiting under high heat.",
+                                                hotspotName = "Banjul Ferry Port",
+                                                lat = 13.4510,
+                                                lng = -16.5680,
+                                                potentialEarningsGmd = 90
+                                            )
+                                            activeSurgeEvent = newEvent
+                                            viewModel.triggerDriverPushNotification(
+                                                driverId = currentDriver?.id ?: "",
+                                                driverName = currentDriver?.name ?: "",
+                                                title = "🔥 BANJUL SURGE ALERT",
+                                                message = "High demand simulated in Banjul City! 1.5x Multipliers active."
+                                            )
+                                            android.widget.Toast.makeText(context, "Simulated Banjul Surge Triggered!", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f).height(36.dp).testTag("simulate_banjul_surge_btn"),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = BrandBlueSecondary)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ElectricBolt,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Banjul Surge", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            val newEvent = DemandSurgeEvent(
+                                                id = "surge_manual_kanifing_" + System.currentTimeMillis().toString().takeLast(4),
+                                                zoneName = "Kanifing Area",
+                                                region = "KANIFING",
+                                                surgeMultiplier = 1.7,
+                                                description = "Midday peak demand simulated at Serekunda Market. High trip request volume.",
+                                                hotspotName = "Serekunda Market",
+                                                lat = 13.4382,
+                                                lng = -16.6780,
+                                                potentialEarningsGmd = 150
+                                            )
+                                            activeSurgeEvent = newEvent
+                                            viewModel.triggerDriverPushNotification(
+                                                driverId = currentDriver?.id ?: "",
+                                                driverName = currentDriver?.name ?: "",
+                                                title = "🔥 KANIFING SURGE ALERT",
+                                                message = "High demand simulated in Kanifing Area! 1.7x Multipliers active."
+                                            )
+                                            android.widget.Toast.makeText(context, "Simulated Kanifing Surge Triggered!", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.weight(1f).height(36.dp).testTag("simulate_kanifing_surge_btn"),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ElectricBolt,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Kanifing Surge", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
+                            }
+
+                            if (selectedTimeframe == "WEEKLY") {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().testTag("weekly_payout_summary_card"),
+                                    colors = CardDefaults.cardColors(containerColor = BrandBlueLight.copy(alpha = 0.5f)),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.15f))
+                                ) {
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        // Header
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.Payments,
+                                                contentDescription = "Payout Info",
+                                                tint = BrandBluePrimary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "Weekly Payout Summary",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = BrandBlueDark
+                                            )
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        
+                                        // Direct visual callout emphasizing zero signup fees & flat commission
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(PureWhite)
+                                                .padding(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Info,
+                                                contentDescription = "Zero signup fee info",
+                                                tint = SuccessGreen,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Zero sign-up fees. Weekly payouts via mobile money (Wave/Africell). Flat 15% platform commission tracked per completed ride request.",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = BrandBlueDark.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        
+                                        // Numbers
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Gross Ride Fares", fontSize = 11.sp, color = NeutralGray)
+                                            Text("${totalFares} GMD", fontWeight = FontWeight.SemiBold, fontSize = 11.sp, color = BrandBlueDark)
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Flat 15% Commission Deduction", fontSize = 11.sp, color = ErrorRed)
+                                            Text("-${platformCommission} GMD", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ErrorRed)
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text("Completed Tips (Keep 100%)", fontSize = 11.sp, color = NeutralGray)
+                                            Text("+${totalTips} GMD", fontWeight = FontWeight.SemiBold, fontSize = 11.sp, color = SuccessGreen)
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("Net Ready for Payout", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                            Text("${netEarningsForTimeframe} GMD", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, color = SuccessGreen)
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Completed Rides This Week:",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = BrandBlueDark
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        
+                                        if (weeklyTrips.isEmpty()) {
+                                            Text("No completed rides recorded for this week.", fontSize = 10.sp, color = NeutralGray)
+                                        } else {
+                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                weeklyTrips.forEach { trip ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .background(PureWhite)
+                                                            .padding(8.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = "${trip.pickupName.split(",")[0]} ➔ ${trip.dropoffName.split(",")[0]}",
+                                                                fontSize = 10.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = BrandBlueDark,
+                                                                maxLines = 1
+                                                            )
+                                                            Text(
+                                                                text = "Fare: ${trip.fareGmd} GMD | Tip: ${trip.tipGmd} GMD",
+                                                                fontSize = 9.sp,
+                                                                color = NeutralGray
+                                                            )
+                                                            Text(
+                                                                text = "Calculated 15% Commission: ${trip.commissionGmd} GMD (tracked)",
+                                                                fontSize = 9.sp,
+                                                                fontWeight = FontWeight.Medium,
+                                                                color = ErrorRed.copy(alpha = 0.8f)
+                                                            )
+                                                        }
+                                                        Badge(
+                                                            containerColor = SuccessGreen.copy(alpha = 0.1f),
+                                                            contentColor = SuccessGreen
+                                                        ) {
+                                                            Text(
+                                                                text = "READY",
+                                                                fontSize = 8.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        
+                                        Button(
+                                            onClick = {
+                                                showRequestPayoutDialog = true
+                                            },
+                                            enabled = netEarningsForTimeframe > 0,
+                                            modifier = Modifier.fillMaxWidth().testTag("weekly_payout_button"),
+                                            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.AccountBalanceWallet,
+                                                contentDescription = "Payout Wallet",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Request Weekly Payout (${netEarningsForTimeframe} GMD)",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
@@ -890,6 +1702,16 @@ fun DriverScreen(
                 val incomingRequest = trips.firstOrNull { it.status == "REQUESTED" && it.vehicleType == currentDriver.vehicleType }
                 if (incomingRequest != null && currentDriver.isOnline && currentDriver.approvalStatus == "APPROVED") {
                     item {
+                        var timeLeft by remember(incomingRequest.id) { mutableStateOf(30) }
+                        LaunchedEffect(incomingRequest.id) {
+                            timeLeft = 30
+                            while (timeLeft > 0) {
+                                delay(1000L)
+                                timeLeft--
+                            }
+                            viewModel.declineBooking(incomingRequest.id)
+                        }
+
                         Card(
                             modifier = Modifier.fillMaxWidth().testTag("incoming_request_card"),
                             colors = CardDefaults.cardColors(containerColor = BrandBlueDark),
@@ -913,6 +1735,65 @@ fun DriverScreen(
                                         color = SuccessGreen,
                                         fontWeight = FontWeight.Black,
                                         fontSize = 18.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Visual 30-Second Countdown Timer Progress Bar
+                                val progress = timeLeft / 30f
+                                val barColor = when {
+                                    timeLeft > 15 -> SuccessGreen
+                                    timeLeft > 7 -> AccentAmber
+                                    else -> ErrorRed
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Schedule,
+                                            contentDescription = "Timer Icon",
+                                            tint = barColor,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Text(
+                                            text = "Auto-declining in ${timeLeft}s",
+                                            color = barColor,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    Text(
+                                        text = "DECISION TIMER",
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 10.sp
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(Color.White.copy(alpha = 0.2f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth(progress)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(barColor)
                                     )
                                 }
 
@@ -1061,12 +1942,12 @@ fun DriverScreen(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Driver manual steps to match real ride handling
+                                 // Driver manual steps to match real ride handling
                                 when (activeExecution.status) {
                                     "ACCEPTED" -> {
                                         Button(
-                                            onClick = { viewModel.acceptBooking(activeExecution.id, currentDriver.id) }, // triggers update to arrived state next
-                                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                                            onClick = { viewModel.setArrivedAtPickup(activeExecution.id, currentDriver.id) }, // triggers update to arrived state next
+                                            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("set_arrived_pickup_btn"),
                                             colors = ButtonDefaults.buttonColors(containerColor = BrandBlueSecondary)
                                         ) {
                                             Text("Set: Arrived at Pickup")
@@ -1074,8 +1955,8 @@ fun DriverScreen(
                                     }
                                     "ARRIVED" -> {
                                         Button(
-                                            onClick = { viewModel.acceptBooking(activeExecution.id, currentDriver.id) }, // shifts into active EN ROUTE
-                                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                                            onClick = { viewModel.beginTransit(activeExecution.id, currentDriver.id) }, // shifts into active EN ROUTE
+                                            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("begin_transit_btn"),
                                             colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
                                         ) {
                                             Text("Begin Transit & Pick Up Passenger")
@@ -1083,14 +1964,64 @@ fun DriverScreen(
                                     }
                                     "EN_ROUTE" -> {
                                         Button(
-                                            onClick = { viewModel.acceptBooking(activeExecution.id, currentDriver.id) }, // finalize as completed
-                                            modifier = Modifier.fillMaxWidth().height(44.dp),
+                                            onClick = { viewModel.completeTrip(activeExecution.id, currentDriver.id) }, // finalize as completed
+                                            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("complete_drive_btn"),
                                             colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary)
                                         ) {
                                             Text("Complete Drive (Confirm & End)")
                                         }
                                     }
                                 }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                var showEndRideConfirmDialog by remember { mutableStateOf(false) }
+
+                                Button(
+                                    onClick = { showEndRideConfirmDialog = true },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(44.dp)
+                                        .testTag("end_ride_button"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Cancel,
+                                        contentDescription = "End Ride Icon",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("End Ride", fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+
+                                if (showEndRideConfirmDialog) {
+                                    AlertDialog(
+                                        onDismissRequest = { showEndRideConfirmDialog = false },
+                                        title = { Text("End Ride & Complete?", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+                                        text = {
+                                            Text(
+                                                "Are you sure you want to end this ride and complete the trip? This will finalize the passenger's fare of ${activeExecution.fareGmd} GMD and allow them to tip or review.",
+                                                fontSize = 13.sp
+                                             )
+                                         },
+                                         confirmButton = {
+                                             Button(
+                                                 onClick = {
+                                                     showEndRideConfirmDialog = false
+                                                     viewModel.completeTrip(activeExecution.id, currentDriver.id)
+                                                 },
+                                                 colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                                             ) {
+                                                 Text("Confirm & End")
+                                             }
+                                         },
+                                         dismissButton = {
+                                             TextButton(onClick = { showEndRideConfirmDialog = false }) {
+                                                 Text("Cancel")
+                                             }
+                                         }
+                                     )
+                                 }
                             }
                         }
                     }
@@ -1323,6 +2254,357 @@ fun DriverScreen(
                 }
             }
 
+            // Request Payout Dialog (Disbursement summary via Wave/Africell)
+            if (showRequestPayoutDialog) {
+                val driverCompletedTrips = trips.filter { it.driverId == (currentDriver?.id ?: "") && it.status == "COMPLETED" }
+                val calendar = java.util.Calendar.getInstance()
+                calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+                calendar.set(java.util.Calendar.MINUTE, 0)
+                calendar.set(java.util.Calendar.SECOND, 0)
+                calendar.set(java.util.Calendar.MILLISECOND, 0)
+                calendar.add(java.util.Calendar.DAY_OF_YEAR, -6)
+                val beginningOfWeek = calendar.timeInMillis
+                
+                val weeklyTrips = driverCompletedTrips.filter { it.timestamp >= beginningOfWeek }
+                val weeklyFares = weeklyTrips.sumOf { it.fareGmd }
+                val weeklyTipsVal = weeklyTrips.sumOf { it.tipGmd }
+                val weeklyGross = weeklyFares + weeklyTipsVal
+                val weeklyCommission = (weeklyFares * 0.15).toInt()
+                val weeklyNetPayout = (weeklyFares - weeklyCommission) + weeklyTipsVal
+
+                var selectedProvider by remember { mutableStateOf("Wave") } // "Wave" or "Africell"
+                var payoutPhone by remember { mutableStateOf("+220 384 5678") }
+                
+                AlertDialog(
+                    onDismissRequest = { 
+                        if (payoutState !is PayoutState.Loading) {
+                            showRequestPayoutDialog = false 
+                            viewModel.resetPayoutState()
+                        }
+                    },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalanceWallet,
+                                contentDescription = "Payout Title Icon",
+                                tint = BrandBluePrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Prepare Weekly Disbursement", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            when (val state = payoutState) {
+                                is PayoutState.Idle -> {
+                                    Text(
+                                        "Select your preferred Mobile Money provider and confirm the weekly earnings disbursement payload.",
+                                        fontSize = 12.sp,
+                                        color = NeutralGray
+                                    )
+                                    
+                                    // Custom Radio / Selector for Wave / Africell
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        // Wave Card Option
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable { selectedProvider = "Wave" }
+                                                .testTag("provider_wave_card"),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (selectedProvider == "Wave") BrandBlueLight else PureWhite
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                width = 2.dp,
+                                                color = if (selectedProvider == "Wave") BrandBluePrimary else Color.LightGray.copy(alpha = 0.5f)
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(10.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Payments,
+                                                    contentDescription = "Wave Logo",
+                                                    tint = if (selectedProvider == "Wave") BrandBluePrimary else Color.Gray,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    "Wave Money", 
+                                                    fontWeight = FontWeight.Bold, 
+                                                    fontSize = 11.sp,
+                                                    color = if (selectedProvider == "Wave") BrandBlueDark else Color.Gray
+                                                )
+                                                Text("Instant (GMD)", fontSize = 8.sp, color = NeutralGray)
+                                            }
+                                        }
+                                        
+                                        // Africell Card Option
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable { selectedProvider = "Africell" }
+                                                .testTag("provider_africell_card"),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = if (selectedProvider == "Africell") BrandBlueLight else PureWhite
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                width = 2.dp,
+                                                color = if (selectedProvider == "Africell") BrandBluePrimary else Color.LightGray.copy(alpha = 0.5f)
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(10.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.AccountBalanceWallet,
+                                                    contentDescription = "Africell Logo",
+                                                    tint = if (selectedProvider == "Africell") BrandBluePrimary else Color.Gray,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    "Africell Money", 
+                                                    fontWeight = FontWeight.Bold, 
+                                                    fontSize = 11.sp,
+                                                    color = if (selectedProvider == "Africell") BrandBlueDark else Color.Gray
+                                                )
+                                                Text("Instant (GMD)", fontSize = 8.sp, color = NeutralGray)
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Phone Number Input
+                                    OutlinedTextField(
+                                        value = payoutPhone,
+                                        onValueChange = { payoutPhone = it },
+                                        label = { Text("Mobile Money Phone Number", fontSize = 11.sp) },
+                                        placeholder = { Text("+220 XXXXXXX") },
+                                        modifier = Modifier.fillMaxWidth().testTag("payout_phone_input"),
+                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                                        singleLine = true
+                                    )
+                                    
+                                    // Quick Summary Callout inside dialog
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = BrandBlueLight.copy(alpha = 0.3f)),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.1f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text("Weekly Earnings Summary", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BrandBlueDark)
+                                            
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("Gross Ride Fares (+Tips)", fontSize = 10.sp, color = NeutralGray)
+                                                Text("${weeklyGross} GMD", fontWeight = FontWeight.Medium, fontSize = 10.sp, color = BrandBlueDark)
+                                            }
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("WayGo Commission (15%)", fontSize = 10.sp, color = ErrorRed)
+                                                Text("-${weeklyCommission} GMD", fontWeight = FontWeight.Medium, fontSize = 10.sp, color = ErrorRed)
+                                            }
+                                            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                Text("Net Payout", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = SuccessGreen)
+                                                Text("${weeklyNetPayout} GMD", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = SuccessGreen)
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                is PayoutState.Loading -> {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        CircularProgressIndicator(color = BrandBluePrimary, modifier = Modifier.size(40.dp).testTag("payout_loading_indicator"))
+                                        Text(
+                                            "Preparing Weekly Disbursement...", 
+                                            fontWeight = FontWeight.Bold, 
+                                            fontSize = 13.sp, 
+                                            color = BrandBlueDark
+                                        )
+                                        Text(
+                                            "Compiling 15% deductions, preparing $selectedProvider Money payload, and requesting secure transfer reference...",
+                                            fontSize = 10.sp,
+                                            color = NeutralGray,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
+                                }
+                                
+                                is PayoutState.Success -> {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        // Large Success Checkmark
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(CircleShape)
+                                                .background(SuccessGreen.copy(alpha = 0.15f))
+                                                .align(Alignment.CenterHorizontally),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = "Success Icon",
+                                                tint = SuccessGreen,
+                                                modifier = Modifier.size(28.dp).testTag("payout_success_icon")
+                                            )
+                                        }
+                                        
+                                        Text(
+                                            text = "Disbursement Prepared Successfully!",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = SuccessGreen,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        
+                                        Text(
+                                            text = "The weekly earnings summary has been compiled and dispatched for mobile money transfer.",
+                                            fontSize = 10.sp,
+                                            color = NeutralGray,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = PureWhite),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+                                        ) {
+                                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text("Disbursement Method", fontSize = 10.sp, color = NeutralGray)
+                                                    Text("$selectedProvider Mobile Money", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = BrandBlueDark)
+                                                }
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text("Weekly Gross", fontSize = 10.sp, color = NeutralGray)
+                                                    Text("${state.gross} GMD", fontWeight = FontWeight.Medium, fontSize = 10.sp, color = BrandBlueDark)
+                                                }
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text("Platform Fee (15%)", fontSize = 10.sp, color = NeutralGray)
+                                                    Text("-${state.commission} GMD", fontWeight = FontWeight.Medium, fontSize = 10.sp, color = ErrorRed)
+                                                }
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                                    Text("Net Disbursed", fontSize = 10.sp, color = NeutralGray)
+                                                    Text("${state.amount} GMD", fontWeight = FontWeight.Black, fontSize = 11.sp, color = SuccessGreen)
+                                                }
+                                                HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                                                Column {
+                                                    Text("Transaction Reference", fontSize = 9.sp, color = NeutralGray)
+                                                    Text(
+                                                        text = state.refId, 
+                                                        fontWeight = FontWeight.Bold, 
+                                                        fontSize = 10.sp, 
+                                                        color = BrandBluePrimary,
+                                                        modifier = Modifier.testTag("payout_ref_id")
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                is PayoutState.Error -> {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = "Error Icon",
+                                            tint = ErrorRed,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Text(
+                                            "Request Failed",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = ErrorRed
+                                        )
+                                        Text(
+                                            state.message,
+                                            fontSize = 10.sp,
+                                            color = NeutralGray,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        when (payoutState) {
+                            is PayoutState.Idle -> {
+                                Button(
+                                    onClick = {
+                                        viewModel.requestWeeklyPayout(
+                                            driverId = currentDriver?.id ?: "",
+                                            provider = selectedProvider,
+                                            phone = payoutPhone,
+                                            gross = weeklyGross,
+                                            commission = weeklyCommission,
+                                            net = weeklyNetPayout
+                                        )
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                    modifier = Modifier.testTag("confirm_payout_button")
+                                ) {
+                                    Text("Confirm & Disburse")
+                                }
+                            }
+                            is PayoutState.Success -> {
+                                Button(
+                                    onClick = {
+                                        showRequestPayoutDialog = false
+                                        viewModel.resetPayoutState()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                                    modifier = Modifier.testTag("payout_success_close_btn")
+                                ) {
+                                    Text("Done")
+                                }
+                            }
+                            is PayoutState.Error -> {
+                                Button(
+                                    onClick = {
+                                        viewModel.resetPayoutState()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary)
+                                ) {
+                                    Text("Retry")
+                                }
+                            }
+                            else -> {} // no action button during loading
+                        }
+                    },
+                    dismissButton = {
+                        if (payoutState is PayoutState.Idle) {
+                            TextButton(
+                                onClick = { showRequestPayoutDialog = false },
+                                modifier = Modifier.testTag("cancel_payout_button")
+                            ) {
+                                Text("Cancel")
+                            }
+                        }
+                    }
+                )
+            }
+
             // Wallet Dialog (Simulated Mobile Money Transfer)
             if (showCashOutDialog) {
                 var mobileMoneyNum by remember { mutableStateOf("+220 384 5678") }
@@ -1406,6 +2688,308 @@ fun DriverScreen(
                             Text("Dismiss", color = NeutralGray)
                         }
                     }
+                )
+            }
+        }
+    }
+}
+
+data class DayEarnings(
+    val label: String,
+    val amount: Int,
+    val timestamp: Long
+)
+
+@Composable
+fun WeeklyEarningsTrendChart(
+    data: List<DayEarnings>,
+    modifier: Modifier = Modifier
+) {
+    var selectedIndex by remember { mutableStateOf<Int?>(null) }
+    
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("weekly_earnings_trend_card"),
+        colors = CardDefaults.cardColors(containerColor = PureWhite),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.4f)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Weekly Earnings Trend",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = BrandBlueDark
+                    )
+                    Text(
+                        text = "Last 7 days income progression",
+                        fontSize = 10.sp,
+                        color = NeutralGray
+                    )
+                }
+                
+                // Show currently selected/hovered day info
+                if (selectedIndex != null && selectedIndex!! < data.size) {
+                    val selected = data[selectedIndex!!]
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(SuccessGreen)
+                        )
+                        Text(
+                            text = "${selected.label}: ${selected.amount} GMD",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            color = SuccessGreen
+                        )
+                    }
+                } else {
+                    // Default overall stat or legend
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(BrandBluePrimary)
+                        )
+                        Text(
+                            text = "Net Take-home (GMD)",
+                            fontSize = 10.sp,
+                            color = NeutralGray,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Recharts-Style Chart Drawing Area
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+            ) {
+                val density = LocalDensity.current
+                
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(data) {
+                            detectTapGestures(
+                                onPress = { offset ->
+                                    val leftPaddingPx = with(density) { 45.dp.toPx() }
+                                    val rightPaddingPx = with(density) { 12.dp.toPx() }
+                                    val chartWidth = size.width - leftPaddingPx - rightPaddingPx
+                                    if (chartWidth > 0) {
+                                        val xPos = offset.x - leftPaddingPx
+                                        val idx = (xPos / chartWidth * 6f).roundToInt().coerceIn(0, 6)
+                                        selectedIndex = idx
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(data) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    val leftPaddingPx = with(density) { 45.dp.toPx() }
+                                    val rightPaddingPx = with(density) { 12.dp.toPx() }
+                                    val chartWidth = size.width - leftPaddingPx - rightPaddingPx
+                                    if (chartWidth > 0) {
+                                        val xPos = offset.x - leftPaddingPx
+                                        val idx = (xPos / chartWidth * 6f).roundToInt().coerceIn(0, 6)
+                                        selectedIndex = idx
+                                    }
+                                },
+                                onDragEnd = { selectedIndex = null },
+                                onDragCancel = { selectedIndex = null },
+                                onDrag = { change, _ ->
+                                    val leftPaddingPx = with(density) { 45.dp.toPx() }
+                                    val rightPaddingPx = with(density) { 12.dp.toPx() }
+                                    val chartWidth = size.width - leftPaddingPx - rightPaddingPx
+                                    if (chartWidth > 0) {
+                                        val xPos = change.position.x - leftPaddingPx
+                                        val idx = (xPos / chartWidth * 6f).roundToInt().coerceIn(0, 6)
+                                        selectedIndex = idx
+                                    }
+                                }
+                            )
+                        }
+                ) {
+                    val leftPadding = 45.dp.toPx()
+                    val rightPadding = 12.dp.toPx()
+                    val topPadding = 10.dp.toPx()
+                    val bottomPadding = 20.dp.toPx()
+                    
+                    val chartWidth = size.width - leftPadding - rightPadding
+                    val chartHeight = size.height - topPadding - bottomPadding
+                    
+                    if (chartWidth <= 0 || chartHeight <= 0) return@Canvas
+                    
+                    val maxAmount = data.maxOfOrNull { it.amount } ?: 0
+                    val maxVal = maxOf(maxAmount.toFloat(), 400f) // min height scale to prevent division by 0
+                    
+                    // 1. Draw Grid Lines and Y-Axis Labels
+                    val gridLinesCount = 4
+                    val textPaint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.GRAY
+                        textSize = 24f
+                        isAntiAlias = true
+                        textAlign = android.graphics.Paint.Align.RIGHT
+                    }
+                    
+                    for (i in 0 until gridLinesCount) {
+                        val fraction = i.toFloat() / (gridLinesCount - 1)
+                        val y = topPadding + chartHeight - fraction * chartHeight
+                        
+                        // Dashed horizontal line
+                        drawLine(
+                            color = Color.LightGray.copy(alpha = 0.5f),
+                            start = Offset(leftPadding, y),
+                            end = Offset(leftPadding + chartWidth, y),
+                            strokeWidth = 1.dp.toPx(),
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                                floatArrayOf(10f, 10f), 0f
+                            )
+                        )
+                        
+                        // Y-Label
+                        val labelVal = (fraction * maxVal).roundToInt()
+                        drawIntoCanvas { canvas ->
+                            canvas.nativeCanvas.drawText(
+                                "$labelVal",
+                                leftPadding - 10f,
+                                y + 8f,
+                                textPaint
+                            )
+                        }
+                    }
+                    
+                    // 2. Generate point positions
+                    val points = data.mapIndexed { idx, item ->
+                        val x = leftPadding + (idx.toFloat() / 6f) * chartWidth
+                        val y = topPadding + chartHeight - (item.amount.toFloat() / maxVal) * chartHeight
+                        Offset(x, y)
+                    }
+                    
+                    // 3. Draw gradient area fill below the trend line (Recharts area chart look)
+                    val areaPath = Path().apply {
+                        moveTo(points[0].x, topPadding + chartHeight)
+                        points.forEach { lineTo(it.x, it.y) }
+                        lineTo(points.last().x, topPadding + chartHeight)
+                        close()
+                    }
+                    
+                    drawPath(
+                        path = areaPath,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                BrandBluePrimary.copy(alpha = 0.22f),
+                                BrandBluePrimary.copy(alpha = 0.00f)
+                            ),
+                            startY = topPadding,
+                            endY = topPadding + chartHeight
+                        )
+                    )
+                    
+                    // 4. Draw the trend line stroke
+                    val linePath = Path().apply {
+                        moveTo(points[0].x, points[0].y)
+                        for (i in 1 until points.size) {
+                            lineTo(points[i].x, points[i].y)
+                        }
+                    }
+                    
+                    drawPath(
+                        path = linePath,
+                        color = BrandBluePrimary,
+                        style = Stroke(width = 2.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    )
+                    
+                    // 5. Draw data point dots & bottom X-Axis labels
+                    val labelPaint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.GRAY
+                        textSize = 24f
+                        isAntiAlias = true
+                        textAlign = android.graphics.Paint.Align.CENTER
+                    }
+                    
+                    points.forEachIndexed { idx, point ->
+                        val isSelected = selectedIndex == idx
+                        
+                        // Draw dot
+                        drawCircle(
+                            color = if (isSelected) SuccessGreen else BrandBluePrimary,
+                            radius = if (isSelected) 6.dp.toPx() else 4.dp.toPx(),
+                            center = point
+                        )
+                        drawCircle(
+                            color = Color.White,
+                            radius = if (isSelected) 3.dp.toPx() else 1.5.dp.toPx(),
+                            center = point
+                        )
+                        
+                        // Draw X-Label (Day name)
+                        drawIntoCanvas { canvas ->
+                            canvas.nativeCanvas.drawText(
+                                data[idx].label,
+                                point.x,
+                                topPadding + chartHeight + 24f,
+                                labelPaint
+                            )
+                        }
+                    }
+                    
+                    // 6. Draw vertical interactive selector line if hovered
+                    if (selectedIndex != null && selectedIndex!! < points.size) {
+                        val activePoint = points[selectedIndex!!]
+                        drawLine(
+                            color = SuccessGreen.copy(alpha = 0.6f),
+                            start = Offset(activePoint.x, topPadding),
+                            end = Offset(activePoint.x, topPadding + chartHeight),
+                            strokeWidth = 1.5.dp.toPx(),
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                                floatArrayOf(8f, 8f), 0f
+                            )
+                        )
+                    }
+                }
+            }
+            
+            // Explanatory footer
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Tips info",
+                    tint = NeutralGray,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Chart displays total take-home pay (including 100% of driver tips)",
+                    fontSize = 9.sp,
+                    color = NeutralGray
                 )
             }
         }
