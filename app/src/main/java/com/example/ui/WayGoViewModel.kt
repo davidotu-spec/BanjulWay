@@ -67,6 +67,17 @@ class WayGoViewModel(
         initialValue = emptyList()
     )
 
+    private val _oneTapBookingDestination = MutableStateFlow<SavedPlaceEntity?>(null)
+    val oneTapBookingDestination: StateFlow<SavedPlaceEntity?> = _oneTapBookingDestination.asStateFlow()
+
+    fun selectOneTapDestination(savedPlace: SavedPlaceEntity) {
+        _oneTapBookingDestination.value = savedPlace
+    }
+
+    fun clearOneTapDestination() {
+        _oneTapBookingDestination.value = null
+    }
+
     val supportMessages = repository.allSupportMessagesFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),

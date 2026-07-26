@@ -324,6 +324,10 @@ fun WayGoChatDialog(
                 }
             }
         },
-        confirmButton = {}
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = BrandBluePrimary, fontWeight = FontWeight.Bold)
+            }
+        }
     )
 }

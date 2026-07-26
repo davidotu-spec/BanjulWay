@@ -28,7 +28,8 @@ import com.example.ui.theme.*
 @Composable
 fun AdminScreen(
     viewModel: WayGoViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenSectionSheet: (() -> Unit)? = null
 ) {
     val drivers by viewModel.allDrivers.collectAsState()
     val trips by viewModel.allTrips.collectAsState()
@@ -44,34 +45,52 @@ fun AdminScreen(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onOpenSectionSheet?.invoke() }
+                            .padding(vertical = 4.dp, horizontal = 4.dp)
+                            .testTag("admin_topbar_brand")
                     ) {
-                        // Minimalist circular brand badge
+                        // Circular brand badge with WayGo inside
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(42.dp)
                                 .clip(CircleShape)
-                                .background(BrandBluePrimary),
+                                .background(
+                                    androidx.compose.ui.graphics.Brush.linearGradient(
+                                        colors = listOf(BrandBluePrimary, BrandBlueDark)
+                                    )
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "W",
+                                text = "WayGo",
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
-                                fontSize = 18.sp,
+                                fontSize = 11.5.sp,
                                 style = LocalTextStyle.current.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                             )
                         }
                         Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Admin Panel",
+                                    color = BrandBlueDark,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp,
+                                    letterSpacing = (-0.3).sp
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Switch Section",
+                                    tint = BrandBluePrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                             Text(
-                                text = "WayGo",
-                                color = BrandBluePrimary,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 18.sp,
-                                letterSpacing = (-0.5).sp
-                            )
-                            Text(
-                                text = "Admin Panel",
+                                text = "System Control • Tap to switch section",
                                 color = NeutralGray,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
@@ -80,6 +99,17 @@ fun AdminScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { onOpenSectionSheet?.invoke() },
+                        modifier = Modifier.testTag("admin_open_section_sheet_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GridView,
+                            contentDescription = "Switch Section",
+                            tint = BrandBluePrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                     AssistChip(
                         onClick = { viewModel.setRole("PASSENGER") },
                         label = { Text("Passenger", fontSize = 11.sp, fontWeight = FontWeight.Bold) },

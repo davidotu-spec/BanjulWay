@@ -10,8 +10,10 @@ import coil.compose.rememberAsyncImagePainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,10 +32,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -41,13 +45,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.DriverEntity
 import com.example.data.TripEntity
+import com.example.data.TripFareEstimationService
 import com.example.data.UserProfileEntity
 import com.example.ui.theme.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.BorderStroke
 
 // Seed locations of Gambia
 data class GLocation(val name: String, val lat: Double, val lng: Double)
@@ -64,7 +68,8 @@ val GAMBIA_LOCATIONS = listOf(
 @Composable
 fun PassengerScreen(
     viewModel: WayGoViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onOpenSectionSheet: (() -> Unit)? = null
 ) {
     val isLoggedIn by viewModel.isUserLoggedIn.collectAsState()
     val otpRequested by viewModel.otpRequested.collectAsState()
@@ -96,35 +101,71 @@ fun PassengerScreen(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onOpenSectionSheet?.invoke() }
+                            .padding(vertical = 4.dp, horizontal = 4.dp)
+                            .testTag("passenger_topbar_brand")
                     ) {
-                        // Minimalist circular brand badge
+                        // Circular brand badge with WayGo inside
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
+                                .size(42.dp)
                                 .clip(CircleShape)
-                                .background(BrandBluePrimary),
+                                .background(
+                                    androidx.compose.ui.graphics.Brush.linearGradient(
+                                        colors = listOf(BrandBluePrimary, BrandBlueDark)
+                                    )
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "W",
+                                text = "WayGo",
                                 color = Color.White,
                                 fontWeight = FontWeight.Black,
-                                fontSize = 18.sp,
+                                fontSize = 11.5.sp,
                                 style = LocalTextStyle.current.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                             )
                         }
-                        Text(
-                            text = "WayGo",
-                            color = BrandBluePrimary,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 20.sp,
-                            letterSpacing = (-0.5).sp
-                        )
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "WayGo Ride",
+                                    color = BrandBlueDark,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Switch Section",
+                                    tint = BrandBluePrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Text(
+                                text = "Gambia • Tap to switch section",
+                                color = BrandBluePrimary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = PureWhite),
                 actions = {
+                    IconButton(
+                        onClick = { onOpenSectionSheet?.invoke() },
+                        modifier = Modifier.testTag("open_section_sheet_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GridView,
+                            contentDescription = "Switch Section",
+                            tint = BrandBluePrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                     IconButton(onClick = { activeTabSubState = "PROFILE" }) {
                         Icon(
                             imageVector = Icons.Default.AccountCircle,
@@ -362,11 +403,11 @@ fun PassengerAuthView(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // WayGo Soft Geometric Brand Badge
+            // Circular WayGo Brand Icon Badge
             Box(
                 modifier = Modifier
-                    .size(76.dp)
-                    .clip(RoundedCornerShape(22.dp))
+                    .size(88.dp)
+                    .clip(CircleShape)
                     .background(
                         Brush.linearGradient(
                             colors = listOf(BrandBlueSecondary, BrandBluePrimary)
@@ -374,32 +415,25 @@ fun PassengerAuthView(
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.DirectionsCar,
-                    contentDescription = "WayGo App Icon",
-                    tint = PureWhite,
-                    modifier = Modifier.size(40.dp)
-                )
-                // Spark badge signifying real-time dispatch and modern reliability
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(AccentAmber)
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-4).dp, y = 4.dp)
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DirectionsCar,
+                        contentDescription = "WayGo App Icon",
+                        tint = PureWhite,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = "WayGo",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        color = PureWhite,
+                        style = LocalTextStyle.current.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Text(
-                text = "WayGo",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Black,
-                color = PureWhite,
-                letterSpacing = 1.2.sp
-            )
 
             Text(
                 text = "The Gambia's Modern Ride Network",
@@ -1044,7 +1078,7 @@ fun HomeScreenContent(
 
     // Prepopulate inputs with profile details or templates on first mount
     LaunchedEffect(profile) {
-        if (profile != null) {
+        if (profile != null && dropoffName.isEmpty()) {
             pickupName = profile.savedHome
             val homeMatch = GAMBIA_LOCATIONS.firstOrNull { it.name.startsWith(profile.savedHome.split(",")[0]) }
             pCoordinates = homeMatch ?: GAMBIA_LOCATIONS[2]
@@ -1055,20 +1089,33 @@ fun HomeScreenContent(
         }
     }
 
-    // Dynamic cost calculator
-    // Cars are 15 GMD per step (approx 180 total), Tricycles are 8 GMD per step (approx 100 total)
-    val distanceUnit = pCoordinates?.let { p ->
-        dCoordinates?.let { d ->
-            val dLat = Math.abs(p.lat - d.lat)
-            val dLng = Math.abs(p.lng - d.lng)
-            dLat + dLng
+    val oneTapDest by viewModel.oneTapBookingDestination.collectAsState()
+    LaunchedEffect(oneTapDest) {
+        val dest = oneTapDest
+        if (dest != null) {
+            dropoffName = dest.name
+            val match = GAMBIA_LOCATIONS.firstOrNull { it.name.contains(dest.name.split(",")[0], ignoreCase = true) }
+            dCoordinates = match ?: GLocation(dest.name, dest.lat, dest.lng)
+            viewModel.clearOneTapDestination()
         }
-    } ?: 0.05
-    val estimatedFare = if (selectVehicleType == "CAR") {
-        (60 + (distanceUnit * 4200)).toInt()
-    } else {
-        (30 + (distanceUnit * 2200)).toInt()
     }
+
+    // Trip Fare Estimation Service computation
+    val carFareEstimate = remember(pCoordinates, dCoordinates) {
+        val pL = pCoordinates?.lat ?: 13.4471
+        val pG = pCoordinates?.lng ?: -16.6791
+        val dL = dCoordinates?.lat ?: 13.4533
+        val dG = dCoordinates?.lng ?: -16.5746
+        TripFareEstimationService.estimateFare(pL, pG, dL, dG, "CAR").finalFareGmd
+    }
+    val tricycleFareEstimate = remember(pCoordinates, dCoordinates) {
+        val pL = pCoordinates?.lat ?: 13.4471
+        val pG = pCoordinates?.lng ?: -16.6791
+        val dL = dCoordinates?.lat ?: 13.4533
+        val dG = dCoordinates?.lng ?: -16.5746
+        TripFareEstimationService.estimateFare(pL, pG, dL, dG, "TRICYCLE").finalFareGmd
+    }
+    val estimatedFare = if (selectVehicleType == "CAR") carFareEstimate else tricycleFareEstimate
 
     LazyColumn(
         modifier = Modifier
@@ -1087,7 +1134,11 @@ fun HomeScreenContent(
                     simulatedDriverLng = simLng,
                     passengerLat = pCoordinates?.lat ?: 13.4471,
                     passengerLng = pCoordinates?.lng ?: -16.6791,
-                    progress = progress
+                    progress = progress,
+                    onSelectDriver = { selectedDriver ->
+                        selectVehicleType = selectedDriver.vehicleType
+                        selectedDriverForProfile = selectedDriver
+                    }
                 )
                 
                 SosEmergencyButton(
@@ -1095,8 +1146,9 @@ fun HomeScreenContent(
                     pLng = pCoordinates?.lng ?: -16.6791,
                     activeTripId = activeTrip?.id,
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(14.dp)
+                        .zIndex(12f)
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 12.dp)
                 )
             }
         }
@@ -1501,6 +1553,14 @@ fun HomeScreenContent(
                                 },
                                 label = { Text("Pickup Location") },
                                 leadingIcon = { Icon(Icons.Default.MyLocation, contentDescription = "Loc", tint = SuccessGreen) },
+                                trailingIcon = {
+                                    IconButton(onClick = { showPickupDropdown = !showPickupDropdown }) {
+                                        Icon(
+                                            imageVector = if (showPickupDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                            contentDescription = "Toggle Pickup Locations"
+                                        )
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth().testTag("pickup_input"),
                                 singleLine = true
                             )
@@ -1510,7 +1570,11 @@ fun HomeScreenContent(
                                     onDismissRequest = { showPickupDropdown = false },
                                     modifier = Modifier.fillMaxWidth(0.9f)
                                 ) {
-                                    GAMBIA_LOCATIONS.forEach { loc ->
+                                    val filteredLocations = GAMBIA_LOCATIONS.filter {
+                                        pickupName.isBlank() || it.name.contains(pickupName, ignoreCase = true)
+                                    }
+                                    val locationsToShow = if (filteredLocations.isNotEmpty()) filteredLocations else GAMBIA_LOCATIONS
+                                    locationsToShow.forEach { loc ->
                                         DropdownMenuItem(
                                             text = { Text(loc.name) },
                                             onClick = {
@@ -1535,6 +1599,14 @@ fun HomeScreenContent(
                                 },
                                 label = { Text("Destination") },
                                 leadingIcon = { Icon(Icons.Default.Place, contentDescription = "Drop", tint = ErrorRed) },
+                                trailingIcon = {
+                                    IconButton(onClick = { showDropoffDropdown = !showDropoffDropdown }) {
+                                        Icon(
+                                            imageVector = if (showDropoffDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
+                                            contentDescription = "Toggle Destination Locations"
+                                        )
+                                    }
+                                },
                                 modifier = Modifier.fillMaxWidth().testTag("dropoff_input"),
                                 singleLine = true
                             )
@@ -1544,7 +1616,11 @@ fun HomeScreenContent(
                                     onDismissRequest = { showDropoffDropdown = false },
                                     modifier = Modifier.fillMaxWidth(0.9f)
                                 ) {
-                                    GAMBIA_LOCATIONS.forEach { loc ->
+                                    val filteredLocations = GAMBIA_LOCATIONS.filter {
+                                        dropoffName.isBlank() || it.name.contains(dropoffName, ignoreCase = true)
+                                    }
+                                    val locationsToShow = if (filteredLocations.isNotEmpty()) filteredLocations else GAMBIA_LOCATIONS
+                                    locationsToShow.forEach { loc ->
                                         DropdownMenuItem(
                                             text = { Text(loc.name) },
                                             onClick = {
@@ -1589,9 +1665,9 @@ fun HomeScreenContent(
                                         modifier = Modifier.size(36.dp)
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text("WayGo Sedan", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
-                                    Text("Est. ${estimatedFare} GMD", fontSize = 11.sp, color = BrandBlueDark.copy(alpha = 0.7f))
-                                    Text("Best Value", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
+                                    Text("WayGo Sedan (Car)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                    Text("Est. ${carFareEstimate} GMD", fontSize = 11.sp, color = BrandBlueDark.copy(alpha = 0.8f), fontWeight = FontWeight.SemiBold)
+                                    Text("Comfortable", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
                                 }
                             }
 
@@ -1621,8 +1697,7 @@ fun HomeScreenContent(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text("Keke / Tricycle", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
-                                    // Tricycle is cheaper
-                                    Text("Est. ${(estimatedFare * 0.6).toInt()} GMD", fontSize = 11.sp, color = BrandBlueDark.copy(alpha = 0.7f))
+                                    Text("Est. ${tricycleFareEstimate} GMD", fontSize = 11.sp, color = BrandBlueDark.copy(alpha = 0.8f), fontWeight = FontWeight.SemiBold)
                                     Text("Affordable", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
                                 }
                             }
@@ -1961,7 +2036,14 @@ fun HomeScreenContent(
                                             color = BrandBlueDark
                                         )
                                     },
-                                    confirmButton = {}
+                                    confirmButton = {
+                                        TextButton(onClick = {
+                                            isProcessingFlutterwave = false
+                                            isFlutterwaveInitiating = false
+                                        }) {
+                                            Text("Cancel", color = NeutralGray)
+                                        }
+                                    }
                                 )
                             } else if (flutterwaveUrl != null) {
                                 FlutterwaveCheckoutDialog(
@@ -2029,7 +2111,14 @@ fun HomeScreenContent(
                                             color = BrandBlueDark
                                         )
                                     },
-                                    confirmButton = {}
+                                    confirmButton = {
+                                        TextButton(onClick = {
+                                            isProcessingStripe = false
+                                            isStripeInitiating = false
+                                        }) {
+                                            Text("Cancel", color = NeutralGray)
+                                        }
+                                    }
                                 )
                             } else if (stripeUrl != null) {
                                 StripeCheckoutDialog(
@@ -2573,6 +2662,7 @@ fun HomeScreenContent(
                                 vehiclePlate = activeTrip!!.vehiclePlate ?: "BJL-Registered",
                                 driverRating = matchedDriver?.rating ?: 4.9f,
                                 tripId = activeTrip!!.id,
+                                tripFareGmd = activeTrip!!.fareGmd,
                                 onSubmitRating = { stars, comment, selectedTagsList, tipGmd ->
                                     viewModel.submitRating(
                                         tripId = activeTrip!!.id,
@@ -3259,8 +3349,13 @@ fun ProfileScreenContent(
     var smsUpdatesEnabled by remember { mutableStateOf(true) }
     var selectedLanguage by remember { mutableStateOf("English") }
 
-    // Trip Log filter: "ALL", "COMPLETED", "CANCELLED"
-    var tripLogFilter by remember { mutableStateOf("ALL") }
+    // Trip Log filters: Status & Date Range
+    var tripLogFilter by remember { mutableStateOf("ALL") } // "ALL", "COMPLETED", "CANCELLED"
+    var tripLogDateRangeFilter by remember { mutableStateOf("ALL_TIME") } // "ALL_TIME", "TODAY", "LAST_7_DAYS", "LAST_30_DAYS", "CUSTOM"
+    var customStartDaysAgo by remember { mutableIntStateOf(30) }
+    var customEndDaysAgo by remember { mutableIntStateOf(0) }
+    var showCustomDateDialog by remember { mutableStateOf(false) }
+    var selectedTripForReceipt by remember { mutableStateOf<TripEntity?>(null) }
 
     LaunchedEffect(profile) {
         if (profile != null) {
@@ -3888,7 +3983,54 @@ fun ProfileScreenContent(
         // FEATURE CONTENT SECTION BASED ON ACTIVE TAB
         when (activeAccountTab) {
             "TRIP_LOG" -> {
-                // 📜 1. TRIP LOG SECTION
+                // 📜 1. TRIP LOG SECTION WITH ENHANCED FILTERS
+                val nowMs = System.currentTimeMillis()
+                val oneDayMs = 24 * 3600 * 1000L
+                val startOfTodayMs = remember(nowMs) {
+                    try {
+                        java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    } catch (e: Exception) {
+                        nowMs - (nowMs % oneDayMs)
+                    }
+                }
+                val sevenDaysAgoMs = nowMs - (7 * oneDayMs)
+                val thirtyDaysAgoMs = nowMs - (30 * oneDayMs)
+                val customStartMs = nowMs - (customStartDaysAgo * oneDayMs)
+                val customEndMs = nowMs - (customEndDaysAgo * oneDayMs)
+
+                val formatTripTime = remember {
+                    { ms: Long ->
+                        try {
+                            val instant = java.time.Instant.ofEpochMilli(ms)
+                            val formatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm")
+                                .withZone(java.time.ZoneId.systemDefault())
+                            formatter.format(instant)
+                        } catch (e: Exception) {
+                            "Recent Date"
+                        }
+                    }
+                }
+
+                val filteredTrips = trips.filter { trip ->
+                    val matchesStatus = when (tripLogFilter) {
+                        "COMPLETED" -> trip.status == "COMPLETED"
+                        "CANCELLED" -> trip.status == "CANCELLED"
+                        else -> true
+                    }
+
+                    val matchesDate = when (tripLogDateRangeFilter) {
+                        "TODAY" -> trip.timestamp >= startOfTodayMs
+                        "LAST_7_DAYS" -> trip.timestamp >= sevenDaysAgoMs
+                        "LAST_30_DAYS" -> trip.timestamp >= thirtyDaysAgoMs
+                        "CUSTOM" -> trip.timestamp in customStartMs..customEndMs
+                        else -> true
+                    }
+
+                    matchesStatus && matchesDate
+                }
+
+                val totalFilteredSpend = filteredTrips.filter { it.status == "COMPLETED" }.sumOf { it.fareGmd + it.tipGmd }
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -3901,41 +4043,178 @@ fun ProfileScreenContent(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Trip History & Receipts",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = BrandBlueDark
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf("ALL", "COMPLETED", "CANCELLED").forEach { filter ->
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (tripLogFilter == filter) BrandBluePrimary.copy(alpha = 0.15f) else Color.Transparent)
-                                            .clickable { tripLogFilter = filter }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = filter,
-                                            fontSize = 10.sp,
-                                            fontWeight = if (tripLogFilter == filter) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (tripLogFilter == filter) BrandBluePrimary else NeutralGray
-                                        )
-                                    }
+                            Column {
+                                Text(
+                                    text = "Trip History & Log",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = BrandBlueDark
+                                )
+                                Text(
+                                    text = "${filteredTrips.size} trips • Total Spent: $totalFilteredSpend GMD",
+                                    fontSize = 11.sp,
+                                    color = NeutralGray
+                                )
+                            }
+
+                            if (tripLogFilter != "ALL" || tripLogDateRangeFilter != "ALL_TIME") {
+                                TextButton(
+                                    onClick = {
+                                        tripLogFilter = "ALL"
+                                        tripLogDateRangeFilter = "ALL_TIME"
+                                    },
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text("Reset Filters", fontSize = 11.sp, color = ErrorRed, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        val filteredTrips = trips.filter {
-                            when (tripLogFilter) {
-                                "COMPLETED" -> it.status == "COMPLETED"
-                                "CANCELLED" -> it.status == "CANCELLED"
-                                else -> true
+                        // 1. STATUS FILTER CHIPS
+                        Text("Filter by Status", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = NeutralGray)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val statusOptions = listOf(
+                                "ALL" to "All Statuses",
+                                "COMPLETED" to "Completed",
+                                "CANCELLED" to "Cancelled"
+                            )
+                            statusOptions.forEach { (filterKey, label) ->
+                                val isSelected = tripLogFilter == filterKey
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            when {
+                                                isSelected && filterKey == "COMPLETED" -> SuccessGreen.copy(alpha = 0.18f)
+                                                isSelected && filterKey == "CANCELLED" -> ErrorRed.copy(alpha = 0.18f)
+                                                isSelected -> BrandBluePrimary.copy(alpha = 0.18f)
+                                                else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
+                                            }
+                                        )
+                                        .border(
+                                            width = if (isSelected) 1.dp else 0.dp,
+                                            color = when {
+                                                isSelected && filterKey == "COMPLETED" -> SuccessGreen
+                                                isSelected && filterKey == "CANCELLED" -> ErrorRed
+                                                isSelected -> BrandBluePrimary
+                                                else -> Color.Transparent
+                                            },
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable { tripLogFilter = filterKey }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = when {
+                                            isSelected && filterKey == "COMPLETED" -> SuccessGreen
+                                            isSelected && filterKey == "CANCELLED" -> ErrorRed
+                                            isSelected -> BrandBluePrimary
+                                            else -> NeutralGray
+                                        }
+                                    )
+                                }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 2. DATE RANGE FILTER CHIPS
+                        Text("Filter by Date Range", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = NeutralGray)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            val dateOptions = listOf(
+                                "ALL_TIME" to "All Time",
+                                "TODAY" to "Today",
+                                "LAST_7_DAYS" to "7 Days",
+                                "LAST_30_DAYS" to "30 Days",
+                                "CUSTOM" to "Custom"
+                            )
+                            dateOptions.forEach { (dateKey, label) ->
+                                val isSelected = tripLogDateRangeFilter == dateKey
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) BrandBluePrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+                                        .clickable {
+                                            tripLogDateRangeFilter = dateKey
+                                            if (dateKey == "CUSTOM") showCustomDateDialog = true
+                                        }
+                                        .padding(vertical = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+
+                        // CUSTOM DATE RANGE SELECTOR CARD
+                        AnimatedVisibility(
+                            visible = tripLogDateRangeFilter == "CUSTOM",
+                            enter = fadeIn() + expandVertically(),
+                            exit = fadeOut() + shrinkVertically()
+                        ) {
+                            Column {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = BrandBluePrimary.copy(alpha = 0.06f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.2f))
+                                ) {
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("Custom Range Window:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BrandBlueDark)
+                                            Text("${customStartDaysAgo}d ago to ${customEndDaysAgo}d ago", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = BrandBluePrimary)
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            listOf(3 to "Last 3 Days", 14 to "Last 14 Days", 60 to "Last 60 Days", 90 to "Last 90 Days").forEach { (days, btnLabel) ->
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        customStartDaysAgo = days
+                                                        customEndDaysAgo = 0
+                                                    },
+                                                    modifier = Modifier.weight(1f).height(32.dp),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(0.dp)
+                                                ) {
+                                                    Text(btnLabel, fontSize = 9.5.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         if (filteredTrips.isEmpty()) {
                             Box(
@@ -3947,7 +4226,7 @@ fun ProfileScreenContent(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = NeutralGray, modifier = Modifier.size(40.dp))
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Text("No trip logs found for this filter.", fontSize = 13.sp, color = NeutralGray)
+                                    Text("No trip logs match selected filters.", fontSize = 13.sp, color = NeutralGray)
                                 }
                             }
                         } else {
@@ -3957,7 +4236,7 @@ fun ProfileScreenContent(
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f)),
                                         shape = RoundedCornerShape(12.dp),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
+                                        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
                                     ) {
                                         Column(modifier = Modifier.padding(12.dp)) {
                                             Row(
@@ -3966,10 +4245,15 @@ fun ProfileScreenContent(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = BrandBluePrimary, modifier = Modifier.size(18.dp))
+                                                    Icon(
+                                                        imageVector = if (trip.vehicleType == "CAR") Icons.Default.DirectionsCar else Icons.Default.TwoWheeler,
+                                                        contentDescription = null,
+                                                        tint = BrandBluePrimary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
                                                     Spacer(modifier = Modifier.width(6.dp))
                                                     Text(
-                                                        text = "Trip #${trip.id}",
+                                                        text = "Trip #${trip.id.takeLast(6)}",
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 13.sp,
                                                         color = MaterialTheme.colorScheme.onSurface
@@ -3993,7 +4277,18 @@ fun ProfileScreenContent(
                                                         color = statusColor
                                                     )
                                                 }
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                            }
+
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = formatTripTime(trip.timestamp),
+                                                fontSize = 10.5.sp,
+                                                color = NeutralGray
+                                            )
+
+                                            Spacer(modifier = Modifier.height(8.dp))
+
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(SuccessGreen))
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Text(text = trip.pickupName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
@@ -4016,17 +4311,36 @@ fun ProfileScreenContent(
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text(
-                                                    text = "Driver: ${(trip.driverName ?: "Fatou (Taxi)").ifBlank { "Fatou (Taxi)" }}",
-                                                    fontSize = 11.5.sp,
-                                                    color = NeutralGray
-                                                )
-                                                Text(
-                                                    text = "${trip.fareGmd.toInt()} GMD",
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    fontSize = 14.sp,
-                                                    color = BrandBluePrimary
-                                                )
+                                                Column {
+                                                    Text(
+                                                        text = "Driver: ${(trip.driverName ?: "Fatou (Taxi)").ifBlank { "Fatou (Taxi)" }}",
+                                                        fontSize = 11.5.sp,
+                                                        color = NeutralGray
+                                                    )
+                                                    Text(
+                                                        text = "Payment: ${trip.paymentMethod}",
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = BrandBluePrimary
+                                                    )
+                                                }
+
+                                                Column(horizontalAlignment = Alignment.End) {
+                                                    Text(
+                                                        text = "${trip.fareGmd + trip.tipGmd} GMD",
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 14.sp,
+                                                        color = BrandBlueDark
+                                                    )
+                                                    if (trip.tipGmd > 0) {
+                                                        Text(
+                                                            text = "(Includes ${trip.tipGmd} GMD Tip)",
+                                                            fontSize = 9.5.sp,
+                                                            color = SuccessGreen,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -4036,7 +4350,6 @@ fun ProfileScreenContent(
                     }
                 }
             }
-        }
 
             "INBOX" -> {
                 // 📥 2. INBOX SECTION
@@ -4588,91 +4901,324 @@ fun ProfileScreenContent(
             }
 
             "SAVED_PLACES" -> {
-                // 📍 6. SAVED PLACES SECTION
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                // 📍 SAVED PLACES MANAGEMENT SCREEN
+                val savedPlacesFromDb by viewModel.allSavedPlaces.collectAsState()
+
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Top Hero Banner Card
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        shape = RoundedCornerShape(18.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Text("Saved Addresses & Favorites", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = BrandBlueDark)
-                            IconButton(onClick = { showAddSavedPlaceDialog = true }) {
-                                Icon(Icons.Default.Add, contentDescription = "Add Place", tint = BrandBluePrimary)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Saved Places & Locations",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = BrandBlueDark
+                                    )
+                                    Text(
+                                        text = "${savedPlacesFromDb.size} locations stored for 1-tap booking",
+                                        fontSize = 11.5.sp,
+                                        color = NeutralGray
+                                    )
+                                }
+
+                                Button(
+                                    onClick = { showAddSavedPlaceDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.testTag("add_saved_place_top_btn")
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Add Place", fontSize = 12.sp, color = Color.White)
+                                }
+                            }
+
+                            // Quick tip banner
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = BrandBluePrimary.copy(alpha = 0.06f),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.15f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.TouchApp, contentDescription = null, tint = BrandBluePrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Tap 'Book Ride' on any place to instantly load it as your dropoff location and calculate instant fares!",
+                                        fontSize = 10.5.sp,
+                                        color = BrandBlueDark,
+                                        lineHeight = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // 1. PRIMARY LOCATIONS (Home & Work)
+                    Text("Primary Locations", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Home Card
+                        val homePlace = savedPlacesFromDb.firstOrNull { it.label.equals("Home", ignoreCase = true) }
+                        val homeAddress = homePlace?.name ?: editHome
+                        val homeLat = homePlace?.lat ?: 13.4471
+                        val homeLng = homePlace?.lng ?: -16.6791
+
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.2f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(32.dp).clip(CircleShape).background(BrandBluePrimary.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Home, contentDescription = null, tint = BrandBluePrimary, modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = { showHomePicker = true }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit Home", tint = NeutralGray, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Home", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = BrandBlueDark)
+                                Text(
+                                    text = homeAddress,
+                                    fontSize = 11.sp,
+                                    color = NeutralGray,
+                                    maxLines = 2,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.heightIn(min = 32.dp)
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.selectOneTapDestination(
+                                            com.example.data.SavedPlaceEntity(
+                                                name = homeAddress,
+                                                label = "Home",
+                                                lat = homeLat,
+                                                lng = homeLng,
+                                                iconType = "HOME"
+                                            )
+                                        )
+                                        onBack()
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(32.dp).testTag("book_home_button"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Icon(Icons.Default.DirectionsCar, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Book Ride", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
-                        // Home Location
-                        Box(modifier = Modifier.fillMaxWidth().clickable { showHomePicker = true }) {
-                            OutlinedTextField(
-                                value = editHome,
-                                onValueChange = {},
-                                readOnly = true,
-                                enabled = false,
-                                label = { Text("Home Location") },
-                                leadingIcon = { Icon(Icons.Default.Home, contentDescription = null, tint = BrandBluePrimary) },
-                                trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = NeutralGray) },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    disabledBorderColor = Color.LightGray.copy(alpha = 0.6f),
-                                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                    disabledLabelColor = NeutralGray
-                                )
-                            )
-                        }
+                        // Work Card
+                        val workPlace = savedPlacesFromDb.firstOrNull { it.label.equals("Work", ignoreCase = true) }
+                        val workAddress = workPlace?.name ?: editWork
+                        val workLat = workPlace?.lat ?: 13.4533
+                        val workLng = workPlace?.lng ?: -16.5746
 
-                        // Work Location
-                        Box(modifier = Modifier.fillMaxWidth().clickable { showWorkPicker = true }) {
-                            OutlinedTextField(
-                                value = editWork,
-                                onValueChange = {},
-                                readOnly = true,
-                                enabled = false,
-                                label = { Text("Work Location") },
-                                leadingIcon = { Icon(Icons.Default.Work, contentDescription = null, tint = BrandBluePrimary) },
-                                trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = NeutralGray) },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    disabledBorderColor = Color.LightGray.copy(alpha = 0.6f),
-                                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                    disabledLabelColor = NeutralGray
-                                )
-                            )
-                        }
-
-                        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
-
-                        Text("Custom Favorite Places", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            customSavedPlaces.forEach { (placeName, address) ->
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.2f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f), RoundedCornerShape(10.dp))
-                                        .padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Icon(Icons.Default.Bookmark, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(placeName, fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
-                                        Text(address, fontSize = 11.sp, color = NeutralGray)
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            customSavedPlaces = customSavedPlaces.filter { it.first != placeName }
-                                        }
+                                    Box(
+                                        modifier = Modifier.size(32.dp).clip(CircleShape).background(BrandBluePrimary.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.Close, contentDescription = "Remove", tint = NeutralGray, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Work, contentDescription = null, tint = BrandBluePrimary, modifier = Modifier.size(18.dp))
+                                    }
+                                    IconButton(onClick = { showWorkPicker = true }, modifier = Modifier.size(24.dp)) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit Work", tint = NeutralGray, modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Work", fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = BrandBlueDark)
+                                Text(
+                                    text = workAddress,
+                                    fontSize = 11.sp,
+                                    color = NeutralGray,
+                                    maxLines = 2,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    modifier = Modifier.heightIn(min = 32.dp)
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.selectOneTapDestination(
+                                            com.example.data.SavedPlaceEntity(
+                                                name = workAddress,
+                                                label = "Work",
+                                                lat = workLat,
+                                                lng = workLng,
+                                                iconType = "WORK"
+                                            )
+                                        )
+                                        onBack()
+                                    },
+                                    modifier = Modifier.fillMaxWidth().height(32.dp).testTag("book_work_button"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Icon(Icons.Default.DirectionsCar, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Book Ride", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. CUSTOM FAVORITE PLACES LIST
+                    val customPlaces = savedPlacesFromDb.filter {
+                        !it.label.equals("Home", ignoreCase = true) && !it.label.equals("Work", ignoreCase = true)
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Custom Favorite Locations", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandBlueDark)
+                                Text("${customPlaces.size} saved", fontSize = 11.sp, color = NeutralGray)
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            if (customPlaces.isEmpty()) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(20.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Icon(Icons.Default.AddLocationAlt, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(36.dp))
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text("No Custom Saved Places Yet", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                        Text(
+                                            "Pin your favorite gym, beach resort, market, or family location for 1-tap booking.",
+                                            fontSize = 11.sp,
+                                            color = NeutralGray,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        OutlinedButton(
+                                            onClick = { showAddSavedPlaceDialog = true },
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("+ Add First Custom Place", fontSize = 11.5.sp)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    customPlaces.forEach { place ->
+                                        val placeIcon = when (place.iconType) {
+                                            "HOME" -> Icons.Default.Home
+                                            "WORK" -> Icons.Default.Work
+                                            "STAR" -> Icons.Default.Star
+                                            "SHOPPING" -> Icons.Default.ShoppingBag
+                                            "AIRPORT" -> Icons.Default.Flight
+                                            "BEACH" -> Icons.Default.BeachAccess
+                                            else -> Icons.Default.Place
+                                        }
+
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f)),
+                                            shape = RoundedCornerShape(12.dp),
+                                            border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier.size(36.dp).clip(CircleShape).background(AccentAmber.copy(alpha = 0.15f)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(placeIcon, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(20.dp))
+                                                }
+
+                                                Spacer(modifier = Modifier.width(10.dp))
+
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(place.label, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                                                    Text(place.name, fontSize = 11.sp, color = NeutralGray)
+                                                }
+
+                                                Spacer(modifier = Modifier.width(6.dp))
+
+                                                Button(
+                                                    onClick = {
+                                                        viewModel.selectOneTapDestination(place)
+                                                        onBack()
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                    modifier = Modifier.height(30.dp).testTag("book_custom_place_${place.id}")
+                                                ) {
+                                                    Text("Book", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                                }
+
+                                                IconButton(
+                                                    onClick = { viewModel.removeSavedPlace(place.id) },
+                                                    modifier = Modifier.size(28.dp).testTag("delete_saved_place_${place.id}")
+                                                ) {
+                                                    Icon(Icons.Default.DeleteOutline, contentDescription = "Remove", tint = ErrorRed.copy(alpha = 0.8f), modifier = Modifier.size(18.dp))
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -4913,7 +5459,11 @@ fun ProfileScreenContent(
                     color = BrandBlueDark
                 )
             },
-            confirmButton = {}
+            confirmButton = {
+                TextButton(onClick = { isLinkingCardProcessing = false }) {
+                    Text("Cancel", color = NeutralGray)
+                }
+            }
         )
     }
 

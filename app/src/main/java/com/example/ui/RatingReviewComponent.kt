@@ -36,6 +36,7 @@ fun RatingReviewComponent(
     vehiclePlate: String,
     driverRating: Float,
     tripId: String,
+    tripFareGmd: Int = 150,
     onSubmitRating: (Int, String, List<String>, Int) -> Unit, // stars, comment, tags, tipGmd
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -43,9 +44,21 @@ fun RatingReviewComponent(
     var ratingStars by remember { mutableIntStateOf(5) }
     var reviewComment by remember { mutableStateOf("") }
     val selectedTags = remember { mutableStateListOf<String>() }
-    var selectedTipAmount by remember { mutableIntStateOf(0) } // 0, 25, 50, 100, or custom
-    var showCustomTipField by remember { mutableStateOf(false) }
+    
+    // Tipping selection state: "NONE", "10%", "15%", "20%", "CUSTOM"
+    var selectedTipType by remember { mutableStateOf("15%") } // default suggested 15%
     var customTipInput by remember { mutableStateOf("") }
+
+    val calculatedTipGmd = remember(selectedTipType, customTipInput, tripFareGmd) {
+        when (selectedTipType) {
+            "NONE" -> 0
+            "10%" -> (tripFareGmd * 0.10).toInt()
+            "15%" -> (tripFareGmd * 0.15).toInt()
+            "20%" -> (tripFareGmd * 0.20).toInt()
+            "CUSTOM" -> customTipInput.toIntOrNull() ?: 0
+            else -> 0
+        }
+    }
 
     val scrollState = rememberScrollState()
 
@@ -346,24 +359,39 @@ fun RatingReviewComponent(
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Trip Fare: $tripFareGmd GMD",
+                        fontSize = 11.5.sp,
+                        color = NeutralGray,
+                        fontWeight = FontWeight.Medium
+                    )
+
                     Spacer(modifier = Modifier.height(10.dp))
 
+                    // Percentage Tip Options Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        val tipValues = listOf(0, 25, 50, 100)
-                        tipValues.forEach { amount ->
-                            val isSelected = selectedTipAmount == amount && !showCustomTipField
+                        val tipOptions = listOf(
+                            "NONE" to "No Tip",
+                            "10%" to "10%\n(${(tripFareGmd * 0.10).toInt()} GMD)",
+                            "15%" to "15%\n(${(tripFareGmd * 0.15).toInt()} GMD)",
+                            "20%" to "20%\n(${(tripFareGmd * 0.20).toInt()} GMD)",
+                            "CUSTOM" to "Custom"
+                        )
+
+                        tipOptions.forEach { (typeKey, labelText) ->
+                            val isSelected = selectedTipType == typeKey
                             OutlinedButton(
                                 onClick = {
-                                    selectedTipAmount = amount
-                                    showCustomTipField = false
+                                    selectedTipType = typeKey
                                 },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(38.dp)
-                                    .testTag("tip_option_$amount"),
+                                    .height(44.dp)
+                                    .testTag("tip_option_${typeKey.lowercase().replace("%", "_percent")}"),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(
                                     containerColor = if (isSelected) SuccessGreen.copy(alpha = 0.12f) else Color.Transparent,
@@ -373,40 +401,21 @@ fun RatingReviewComponent(
                                     width = if (isSelected) 1.5.dp else 1.dp,
                                     color = if (isSelected) SuccessGreen else Color.LightGray
                                 ),
-                                contentPadding = PaddingValues(0.dp)
+                                contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = if (amount == 0) "No Tip" else "${amount} GMD",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
+                                    text = labelText,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 13.sp
                                 )
                             }
-                        }
-
-                        // Custom tip button choice
-                        OutlinedButton(
-                            onClick = { showCustomTipField = true },
-                            modifier = Modifier
-                                .weight(1.1f)
-                                .height(38.dp)
-                                .testTag("tip_option_custom"),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = if (showCustomTipField) SuccessGreen.copy(alpha = 0.12f) else Color.Transparent,
-                                contentColor = if (showCustomTipField) SuccessGreen else BrandBlueDark
-                            ),
-                            border = BorderStroke(
-                                width = if (showCustomTipField) 1.5.dp else 1.dp,
-                                color = if (showCustomTipField) SuccessGreen else Color.LightGray
-                            ),
-                            contentPadding = PaddingValues(0.dp)
-                        ) {
-                            Text("Custom", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     AnimatedVisibility(
-                        visible = showCustomTipField,
+                        visible = selectedTipType == "CUSTOM",
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically()
                     ) {
@@ -416,10 +425,9 @@ fun RatingReviewComponent(
                                 onValueChange = {
                                     if (it.all { char -> char.isDigit() }) {
                                         customTipInput = it
-                                        selectedTipAmount = it.toIntOrNull() ?: 0
                                     }
                                 },
-                                placeholder = { Text("Enter Tip in Gambian Dalasis (GMD)") },
+                                placeholder = { Text("Enter custom tip (GMD)") },
                                 leadingIcon = { Text("GMD", fontWeight = FontWeight.Black, fontSize = 12.sp, color = SuccessGreen, modifier = Modifier.padding(start = 10.dp)) },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -432,6 +440,37 @@ fun RatingReviewComponent(
                                     unfocusedBorderColor = Color.LightGray
                                 )
                             )
+                        }
+                    }
+
+                    // Tip summary calculation banner
+                    if (calculatedTipGmd > 0) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = SuccessGreen.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Total Payment: ${tripFareGmd + calculatedTipGmd} GMD",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp,
+                                    color = BrandBlueDark
+                                )
+                                Text(
+                                    text = "(Fare $tripFareGmd + Tip $calculatedTipGmd GMD)",
+                                    fontSize = 10.5.sp,
+                                    color = SuccessGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
@@ -458,8 +497,7 @@ fun RatingReviewComponent(
 
                 Button(
                     onClick = {
-                        val tip = if (showCustomTipField) customTipInput.toIntOrNull() ?: 0 else selectedTipAmount
-                        onSubmitRating(ratingStars, reviewComment, selectedTags.toList(), tip)
+                        onSubmitRating(ratingStars, reviewComment, selectedTags.toList(), calculatedTipGmd)
                     },
                     modifier = Modifier
                         .weight(2f)

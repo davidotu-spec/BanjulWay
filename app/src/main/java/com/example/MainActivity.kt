@@ -94,9 +94,18 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
         // Active View Swap - Full screen without intrusive top segment header bar
         Box(modifier = Modifier.fillMaxSize()) {
             when (activeRole) {
-                "PASSENGER" -> PassengerScreen(viewModel = viewModel)
-                "DRIVER" -> DriverScreen(viewModel = viewModel)
-                "ADMIN" -> AdminScreen(viewModel = viewModel)
+                "PASSENGER" -> PassengerScreen(
+                    viewModel = viewModel,
+                    onOpenSectionSheet = { showSectionSelectorSheet = true }
+                )
+                "DRIVER" -> DriverScreen(
+                    viewModel = viewModel,
+                    onOpenSectionSheet = { showSectionSelectorSheet = true }
+                )
+                "ADMIN" -> AdminScreen(
+                    viewModel = viewModel,
+                    onOpenSectionSheet = { showSectionSelectorSheet = true }
+                )
             }
         }
 

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.TripFareEstimationService
 import com.example.ui.theme.*
 
 @Composable
@@ -36,55 +37,32 @@ fun FareEstimationCalculator(
     onFareCalculated: (Int) -> Unit, // Callback to update the final parent state if desired
     modifier: Modifier = Modifier
 ) {
-    // 1. Calculate haversine distance
-    val distanceKm = remember(pLat, pLng, dLat, dLng) {
-        val r = 6371.0 // Earth radius
-        val dLatRad = Math.toRadians(dLat - pLat)
-        val dLonRad = Math.toRadians(dLng - pLng)
-        val a = Math.sin(dLatRad / 2) * Math.sin(dLatRad / 2) +
-                Math.cos(Math.toRadians(pLat)) * Math.cos(Math.toRadians(dLat)) *
-                Math.sin(dLonRad / 2) * Math.sin(dLonRad / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        val raw = r * c
-        // Prevent 0.0 or excessive coordinates
-        if (raw < 0.2) 2.4 else Math.round(raw * 10) / 10.0
-    }
-
-    // 2. Interactive Surcharge selection
+    // Interactive Surcharge selection
     var selectedSurchargeTier by remember { mutableStateOf("STANDARD") } // "OFF_PEAK", "STANDARD", "RUSH_HOUR"
 
-    val multiplier = when (selectedSurchargeTier) {
-        "OFF_PEAK" -> 0.85
-        "RUSH_HOUR" -> 1.30
-        else -> 1.00
+    // Estimate fare using TripFareEstimationService
+    val estimate = remember(pLat, pLng, dLat, dLng, vehicleType, selectedSurchargeTier) {
+        TripFareEstimationService.estimateFare(
+            pLat = pLat,
+            pLng = pLng,
+            dLat = dLat,
+            dLng = dLng,
+            vehicleType = vehicleType,
+            surchargeTier = selectedSurchargeTier
+        )
     }
 
-    // 3. Estimate Duration based on average Gambia traffic speed (say 25 km/h) plus 2 mins min buffer
-    val durationMinutes = remember(distanceKm) {
-        val calculated = (distanceKm / 25.0 * 60).toInt() + 2
-        if (calculated < 3) 5 else calculated
-    }
-
-    // Cost parameters config
-    val baseFare = if (vehicleType == "CAR") 60.0 else 30.0
-    val perKmRate = if (vehicleType == "CAR") 22.0 else 11.0
-    val perMinRate = if (vehicleType == "CAR") 3.0 else 1.5
-
-    // Detailed math breakdown
-    val calculatedBasePart = baseFare
-    val calculatedDistancePart = distanceKm * perKmRate
-    val calculatedTimePart = durationMinutes * perMinRate
-
-    val rawSubTotal = calculatedBasePart + calculatedDistancePart + calculatedTimePart
-    val rawGrandTotal = rawSubTotal * multiplier
-
-    // Round off to nearest 5 GMD to match Gambian market change system
-    val finalEstimatedTotal = remember(rawGrandTotal) {
-        val rounded = (Math.round(rawGrandTotal / 5.0) * 5).toInt()
-        // Ensure some reasonable minimum bounds
-        val minLimit = if (vehicleType == "CAR") 100 else 50
-        if (rounded < minLimit) minLimit else rounded
-    }
+    val distanceKm = estimate.distanceKm
+    val durationMinutes = estimate.estimatedDurationMin
+    val baseFare = estimate.baseFare
+    val perKmRate = estimate.perKmRate
+    val perMinRate = estimate.perMinRate
+    val calculatedBasePart = estimate.baseFare
+    val calculatedDistancePart = estimate.distanceCharge
+    val calculatedTimePart = estimate.timeCharge
+    val rawSubTotal = estimate.subtotal
+    val multiplier = estimate.surchargeMultiplier
+    val finalEstimatedTotal = estimate.finalFareGmd
 
     // Keep parent informed of estimated fare
     LaunchedEffect(finalEstimatedTotal) {
@@ -328,48 +306,28 @@ fun WayGoFareEstimatorDialog(
     var showDropoffDropdown by remember { mutableStateOf(false) }
     var showFormulaDetails by remember { mutableStateOf(false) }
 
-    // 3. Distance calculation
-    val distanceKm = remember(pickupLoc, dropoffLoc) {
-        val r = 6371.0 // Earth radius
-        val dLatRad = Math.toRadians(dropoffLoc.lat - pickupLoc.lat)
-        val dLonRad = Math.toRadians(dropoffLoc.lng - pickupLoc.lng)
-        val a = Math.sin(dLatRad / 2) * Math.sin(dLatRad / 2) +
-                Math.cos(Math.toRadians(pickupLoc.lat)) * Math.cos(Math.toRadians(dropoffLoc.lat)) *
-                Math.sin(dLonRad / 2) * Math.sin(dLonRad / 2)
-        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-        val raw = r * c
-        if (raw < 0.1) 0.5 else Math.round(raw * 10) / 10.0
+    // 3. Delegate calculation to TripFareEstimationService
+    val estimate = remember(pickupLoc, dropoffLoc, selectedVehicleType, selectedSurchargeTier) {
+        TripFareEstimationService.estimateFare(
+            pLat = pickupLoc.lat,
+            pLng = pickupLoc.lng,
+            dLat = dropoffLoc.lat,
+            dLng = dropoffLoc.lng,
+            vehicleType = selectedVehicleType,
+            surchargeTier = selectedSurchargeTier
+        )
     }
 
-    // 4. Multipliers
-    val multiplier = when (selectedSurchargeTier) {
-        "OFF_PEAK" -> 0.85
-        "RUSH_HOUR" -> 1.30
-        else -> 1.00
-    }
-
-    // 5. Travel duration estimate
-    val durationMinutes = remember(distanceKm) {
-        val calculated = (distanceKm / 25.0 * 60).toInt() + 2
-        if (calculated < 3) 5 else calculated
-    }
-
-    // 6. Base rate calculations
-    val baseFare = if (selectedVehicleType == "CAR") 60.0 else 30.0
-    val perKmRate = if (selectedVehicleType == "CAR") 22.0 else 11.0
-    val perMinRate = if (selectedVehicleType == "CAR") 3.0 else 1.5
-
-    val distanceCharge = distanceKm * perKmRate
-    val timeCharge = durationMinutes * perMinRate
-    val subTotal = baseFare + distanceCharge + timeCharge
-    val surgeTotal = subTotal * multiplier
-
-    // Round to nearest 5 GMD (Gambia local currency convention)
-    val grandTotal = remember(surgeTotal, selectedVehicleType) {
-        val rounded = (Math.round(surgeTotal / 5.0) * 5).toInt()
-        val minLimit = if (selectedVehicleType == "CAR") 100 else 50
-        if (rounded < minLimit) minLimit else rounded
-    }
+    val distanceKm = estimate.distanceKm
+    val durationMinutes = estimate.estimatedDurationMin
+    val baseFare = estimate.baseFare
+    val perKmRate = estimate.perKmRate
+    val perMinRate = estimate.perMinRate
+    val distanceCharge = estimate.distanceCharge
+    val timeCharge = estimate.timeCharge
+    val subTotal = estimate.subtotal
+    val multiplier = estimate.surchargeMultiplier
+    val grandTotal = estimate.finalFareGmd
 
     AlertDialog(
         onDismissRequest = onDismiss,

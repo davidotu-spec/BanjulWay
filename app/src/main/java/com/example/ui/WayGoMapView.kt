@@ -1,29 +1,32 @@
 package com.example.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -31,13 +34,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.data.DriverEntity
 import com.example.data.TripEntity
 import com.example.ui.theme.*
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.semantics.testTag
-import androidx.compose.ui.semantics.semantics
 
 // LatLng bbox for Kanifing / Serekunda / Banjul region
 // Min Lat: 13.4300, Max Lat: 13.4800
@@ -84,497 +84,749 @@ fun WayGoMapView(
     simulatedDriverLng: Double? = null,
     passengerLat: Double = 13.4471,
     passengerLng: Double = -16.6791,
-    progress: Float = 0f
+    progress: Float = 0f,
+    onSelectDriver: ((DriverEntity) -> Unit)? = null
 ) {
     val textMeasurer = rememberTextMeasurer()
-    val oceanColor = Color(0xFFD3E2EE)
-    val landColor = Color(0xFFE8EDF2)    // Clean Minimalism slate-grey map backdrop
-    val roadColor = Color(0xFFCBD5E1)    // Slate-300 clean road borders
-    val roadFillColor = Color(0xFFFFFFFF)
+    val density = LocalDensity.current
+
+    // Interactive Map Control States
+    var mapType by remember { mutableStateOf("ROADMAP") } // "ROADMAP", "SATELLITE", "TERRAIN"
+    var showTraffic by remember { mutableStateOf(false) }
+    var vehicleFilter by remember { mutableStateOf("ALL") } // "ALL", "CAR", "TRICYCLE"
+    var zoomLevel by remember { mutableFloatStateOf(1.0f) }
+    var selectedDriverOnMap by remember { mutableStateOf<DriverEntity?>(null) }
+    var showMapTypeMenu by remember { mutableStateOf(false) }
 
     val isActiveRide = activeTrip != null && activeTrip.status in listOf("ACCEPTED", "ARRIVED", "EN_ROUTE")
-    val boxHeight = if (isActiveRide) 320.dp else 260.dp
+    val boxHeight = if (isActiveRide) 380.dp else 340.dp
+
+    // Filter available online drivers
+    val availableDrivers = remember(drivers, vehicleFilter) {
+        drivers.filter { driver ->
+            driver.isOnline && driver.approvalStatus == "APPROVED" &&
+                    (activeTrip == null || activeTrip.driverId != driver.id) &&
+                    (vehicleFilter == "ALL" || driver.vehicleType == vehicleFilter)
+        }
+    }
+
+    val carCount = remember(drivers) { drivers.count { it.isOnline && it.approvalStatus == "APPROVED" && it.vehicleType == "CAR" } }
+    val bikeCount = remember(drivers) { drivers.count { it.isOnline && it.approvalStatus == "APPROVED" && it.vehicleType == "TRICYCLE" } }
+
+    // Pulsing animation for real-time driver GPS pins
+    val infiniteTransition = rememberInfiniteTransition(label = "driver_pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse_scale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 0.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulse_alpha"
+    )
+
+    // Colors matching official Google Maps themes
+    val (landColor, oceanColor, roadBorderColor, roadFillColor, highwayColor, parkColor) = when (mapType) {
+        "SATELLITE" -> Tuple6(
+            Color(0xFF0F172A), // Dark slate satellite base
+            Color(0xFF0284C7), // Ocean deep blue
+            Color(0xFF334155),
+            Color(0xFF1E293B),
+            Color(0xFF38BDF8),
+            Color(0xFF065F46)
+        )
+        "TERRAIN" -> Tuple6(
+            Color(0xFFEFEBE4), // Topographic warm paper
+            Color(0xFF90CAF9),
+            Color(0xFFD7CCC8),
+            Color(0xFFFFFFFF),
+            Color(0xFFFFB74D),
+            Color(0xFFA5D6A7)
+        )
+        else -> Tuple6( // "ROADMAP" - Official Google Light Palette
+            Color(0xFFF5F3ED), // Google Map Land warm off-white
+            Color(0xFFAADAFF), // Google Map Sky Water
+            Color(0xFFE6E6E6),
+            Color(0xFFFFFFFF),
+            Color(0xFFFFD54F), // Google Highway Yellow
+            Color(0xFFC8E6C9)  // Google Park Light Green
+        )
+    }
+
+    // Keep track of rendered driver screen positions for tap detection
+    val driverPositions = remember { mutableStateListOf<Pair<DriverEntity, Offset>>() }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .height(boxHeight)
             .clip(RoundedCornerShape(24.dp))
-            .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(24.dp))
+            .border(1.5.dp, if (mapType == "SATELLITE") Color(0xFF334155) else Color(0xFFE2E8F0), RoundedCornerShape(24.dp))
             .background(landColor)
+            .testTag("google_maps_view")
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(availableDrivers, zoomLevel, mapType) {
+                    detectTapGestures { tapOffset ->
+                        val touchRadiusPx = with(density) { 32.dp.toPx() }
+                        val tapped = driverPositions.firstOrNull { (_, pos) ->
+                            val dx = tapOffset.x - pos.x
+                            val dy = tapOffset.y - pos.y
+                            (dx * dx + dy * dy) <= (touchRadiusPx * touchRadiusPx)
+                        }?.first
+
+                        selectedDriverOnMap = tapped
+                    }
+                }
+        ) {
             val width = size.width
             val height = size.height
 
-            // Coordinate mapping functions
+            // Clear previous positions
+            driverPositions.clear()
+
+            // Coordinate mapping with zoom scaling
             fun getX(lng: Double): Float {
                 val ratio = (lng - MIN_LNG) / (MAX_LNG - MIN_LNG)
-                return (ratio * width).toFloat()
+                val rawX = ratio * width
+                val centerX = width / 2f
+                return (centerX + (rawX - centerX) * zoomLevel).toFloat()
             }
 
             fun getY(lat: Double): Float {
-                // Inverted because Y goes down
                 val ratio = (MAX_LAT - lat) / (MAX_LAT - MIN_LAT)
-                return (ratio * height).toFloat()
+                val rawY = ratio * height
+                val centerY = height / 2f
+                return (centerY + (rawY - centerY) * zoomLevel).toFloat()
             }
 
-            // 1. Draw land mass backplane
+            // 1. Draw Land Mass
             drawRect(color = landColor)
 
-            // Draw Clean Minimalism grid overlay to replicate the tailwind style exactly
-            val gridSize = 40.dp.toPx()
+            // 2. Draw Parks / Greenery polygons
+            val parkPath = Path().apply {
+                val x1 = getX(-16.7050)
+                val y1 = getY(13.4450)
+                val x2 = getX(-16.6900)
+                val y2 = getY(13.4600)
+                moveTo(x1, y1)
+                lineTo(x2, y1)
+                lineTo(x2, y2)
+                lineTo(x1, y2)
+                close()
+            }
+            drawPath(parkPath, color = parkColor.copy(alpha = 0.5f))
+
+            // 3. Draw Google Map Grid / Block Texture
+            val gridSize = 36.dp.toPx() * zoomLevel
             var curX = 0f
+            val gridColor = if (mapType == "SATELLITE") Color(0xFF334155).copy(alpha = 0.2f) else Color(0xFFE0E0E0).copy(alpha = 0.25f)
             while (curX < width) {
-                drawLine(
-                    color = Color(0xFF94A3B8).copy(alpha = 0.15f),
-                    start = Offset(curX, 0f),
-                    end = Offset(curX, height),
-                    strokeWidth = 1f
-                )
+                drawLine(color = gridColor, start = Offset(curX, 0f), end = Offset(curX, height), strokeWidth = 1f)
                 curX += gridSize
             }
             var curY = 0f
             while (curY < height) {
-                drawLine(
-                    color = Color(0xFF94A3B8).copy(alpha = 0.15f),
-                    start = Offset(0f, curY),
-                    end = Offset(width, curY),
-                    strokeWidth = 1f
-                )
+                drawLine(color = gridColor, start = Offset(0f, curY), end = Offset(width, curY), strokeWidth = 1f)
                 curY += gridSize
             }
 
-            // Draw Atlantic Ocean along the very top and left
-            val waterPath = Path().apply {
+            // 4. Draw Atlantic Ocean coastline
+            val oceanPath = Path().apply {
                 moveTo(0f, 0f)
                 lineTo(width, 0f)
-                quadraticTo(width * 0.7f, height * 0.3f, width * 0.5f, height * 0.15f)
-                quadraticTo(width * 0.2f, height * 0.4f, 0f, height * 0.25f)
+                quadraticTo(width * 0.7f, height * 0.28f, width * 0.45f, height * 0.15f)
+                quadraticTo(width * 0.2f, height * 0.38f, 0f, height * 0.22f)
                 close()
             }
-            drawPath(waterPath, color = oceanColor)
+            drawPath(oceanPath, color = oceanColor)
 
-            // Draw Banjul Peninsular River delta on the right
+            // River Gambia Estuary
             val riverPath = Path().apply {
-                moveTo(width, height * 0.3f)
-                quadraticTo(width * 0.85f, height * 0.45f, width * 0.9f, height * 0.7f)
-                quadraticTo(width * 0.8f, height * 0.85f, width * 0.85f, height)
+                moveTo(width, height * 0.25f)
+                quadraticTo(width * 0.85f, height * 0.42f, width * 0.88f, height * 0.68f)
+                quadraticTo(width * 0.8f, height * 0.85f, width * 0.84f, height)
                 lineTo(width, height)
                 close()
             }
             drawPath(riverPath, color = oceanColor)
 
-            // 2. Draw Main Gambian Highways/Roads
-            // Banjul-Serekunda Highway
-            val highwayStart = Offset(getX(-16.7110), getY(13.4380))
-            val highwayMid = Offset(getX(-16.6500), getY(13.4490))
-            val highwayBanjul = Offset(getX(-16.5820), getY(13.4580))
-            
-            // Draw road outline
-            drawLine(roadColor, highwayStart, highwayMid, strokeWidth = 8f)
-            drawLine(roadColor, highwayMid, highwayBanjul, strokeWidth = 8f)
-            // Draw road inner fill
-            drawLine(roadFillColor, highwayStart, highwayMid, strokeWidth = 4f)
-            drawLine(roadFillColor, highwayMid, highwayBanjul, strokeWidth = 4f)
+            // 5. Draw Google Roads & Major Highways
+            // Banjul - Serrekunda Highway
+            val hStart = Offset(getX(-16.7110), getY(13.4380))
+            val hMid = Offset(getX(-16.6500), getY(13.4490))
+            val hEnd = Offset(getX(-16.5820), getY(13.4580))
 
-            // Kairaba Avenue (Serrekunda)
-            val kairabaStart = Offset(getX(-16.6820), getY(13.4310))
-            val kairabaEnd = Offset(getX(-16.6710), getY(13.4750))
-            drawLine(roadColor, kairabaStart, kairabaEnd, strokeWidth = 7f)
-            drawLine(roadFillColor, kairabaStart, kairabaEnd, strokeWidth = 3f.coerceAtLeast(1f))
+            drawLine(roadBorderColor, hStart, hMid, strokeWidth = 10f * zoomLevel)
+            drawLine(roadBorderColor, hMid, hEnd, strokeWidth = 10f * zoomLevel)
+            drawLine(highwayColor, hStart, hMid, strokeWidth = 6f * zoomLevel)
+            drawLine(highwayColor, hMid, hEnd, strokeWidth = 6f * zoomLevel)
 
-            // Atlantic Boulevard (beach road)
-            val beachRoadStart = Offset(getX(-16.7110), getY(13.4420))
-            val beachRoadEnd = Offset(getX(-16.6800), getY(13.4750))
-            drawLine(roadColor, beachRoadStart, beachRoadEnd, strokeWidth = 6f)
-            drawLine(Color.White, beachRoadStart, beachRoadEnd, strokeWidth = 2.5f)
+            // Kairaba Avenue
+            val kStart = Offset(getX(-16.6820), getY(13.4310))
+            val kEnd = Offset(getX(-16.6710), getY(13.4750))
+            drawLine(roadBorderColor, kStart, kEnd, strokeWidth = 8f * zoomLevel)
+            drawLine(roadFillColor, kStart, kEnd, strokeWidth = 4f * zoomLevel)
 
-            // 3. Draw Landmarks
-            GAMBIAN_LANDMARKS.forEach { landmark ->
-                val x = getX(landmark.lng)
-                val y = getY(landmark.lat)
+            // Atlantic Boulevard
+            val bStart = Offset(getX(-16.7110), getY(13.4420))
+            val bEnd = Offset(getX(-16.6800), getY(13.4750))
+            drawLine(roadBorderColor, bStart, bEnd, strokeWidth = 7f * zoomLevel)
+            drawLine(roadFillColor, bStart, bEnd, strokeWidth = 3.5f * zoomLevel)
 
-                // Landmark Dot
-                drawCircle(
-                    color = BrandBlueDark.copy(alpha = 0.5f),
-                    radius = 4.5f.dp.toPx(),
-                    center = Offset(x, y)
-                )
-                drawCircle(
-                    color = BrandBlueSecondary,
-                    radius = 2.5f.dp.toPx(),
-                    center = Offset(x, y)
-                )
-
-                // Text labels
-                val textStyle = TextStyle(
-                    fontSize = 8.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = BrandBlueDark.copy(alpha = 0.8f)
-                )
-                val textLayoutResult = textMeasurer.measure(
-                    text = landmark.name,
-                    style = textStyle
-                )
-                drawText(
-                    textLayoutResult = textLayoutResult,
-                    topLeft = Offset(x - textLayoutResult.size.width / 2f, y + 4.dp.toPx())
-                )
+            // 6. Google Live Traffic Overlay Layer
+            if (showTraffic) {
+                // Smooth traffic (Green) along Highway
+                drawLine(Color(0xFF4CAF50), hStart, hMid, strokeWidth = 4f * zoomLevel)
+                // Moderate traffic (Orange) along Kairaba
+                drawLine(Color(0xFFFF9800), kStart, kEnd, strokeWidth = 4f * zoomLevel)
+                // Congested traffic (Red) along Banjul entry
+                drawLine(Color(0xFFF44336), hMid, hEnd, strokeWidth = 5f * zoomLevel)
             }
 
-            // 4. Draw Active Trip Path (if booking exists)
+            // 7. Draw Landmarks
+            GAMBIAN_LANDMARKS.forEach { landmark ->
+                val lx = getX(landmark.lng)
+                val ly = getY(landmark.lat)
+
+                if (lx in 0f..width && ly in 0f..height) {
+                    drawCircle(color = BrandBlueDark.copy(alpha = 0.3f), radius = 5f * zoomLevel, center = Offset(lx, ly))
+                    drawCircle(color = BrandBlueSecondary, radius = 3f * zoomLevel, center = Offset(lx, ly))
+
+                    val textStyle = TextStyle(
+                        fontSize = (8.5.sp.value * zoomLevel).sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (mapType == "SATELLITE") Color.White else BrandBlueDark.copy(alpha = 0.85f)
+                    )
+                    val textLayoutResult = textMeasurer.measure(text = landmark.name, style = textStyle)
+                    drawText(
+                        textLayoutResult = textLayoutResult,
+                        topLeft = Offset(lx - textLayoutResult.size.width / 2f, ly + 5.dp.toPx())
+                    )
+                }
+            }
+
+            // 8. Active Trip Routing Line (if ride in progress)
             activeTrip?.let { trip ->
                 val pX = getX(trip.pickupLng)
                 val pY = getY(trip.pickupLat)
                 val dX = getX(trip.dropoffLng)
                 val dY = getY(trip.dropoffLat)
 
-                // Draw pickup location marker
-                drawCircle(
-                    color = SuccessGreen.copy(alpha = 0.3f),
-                    radius = 12.dp.toPx(),
-                    center = Offset(pX, pY)
-                )
-                drawCircle(
-                    color = SuccessGreen,
-                    radius = 5.dp.toPx(),
-                    center = Offset(pX, pY)
-                )
+                // Pickup Pin
+                drawCircle(color = SuccessGreen.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = Offset(pX, pY))
+                drawCircle(color = SuccessGreen, radius = 6.dp.toPx(), center = Offset(pX, pY))
 
-                // Draw dropoff/destination marker
-                drawCircle(
-                    color = ErrorRed.copy(alpha = 0.3f),
-                    radius = 12.dp.toPx(),
-                    center = Offset(dX, dY)
-                )
-                drawCircle(
-                    color = ErrorRed,
-                    radius = 5.dp.toPx(),
-                    center = Offset(dX, dY)
-                )
+                // Dropoff Pin
+                drawCircle(color = ErrorRed.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = Offset(dX, dY))
+                drawCircle(color = ErrorRed, radius = 6.dp.toPx(), center = Offset(dX, dY))
 
-                // Draw route line (dashed style)
+                // Polyline Route
                 drawLine(
                     color = BrandBluePrimary,
                     start = Offset(pX, pY),
                     end = Offset(dX, dY),
-                    strokeWidth = 3.dp.toPx(),
-                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
-                        floatArrayOf(12f, 12f), 0f
-                    )
+                    strokeWidth = 4.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 14f), 0f)
                 )
             }
 
-            // Draw Driver Approaching Pickup Path (ACCEPTED state visual routing line)
-            if (activeTrip != null && activeTrip.status == "ACCEPTED") {
-                val dLat = simulatedDriverLat ?: (activeTrip.pickupLat + 0.012)
-                val dLng = simulatedDriverLng ?: (activeTrip.pickupLng - 0.009)
-                val dX = getX(dLng)
-                val dY = getY(dLat)
-                val pX = getX(activeTrip.pickupLng)
-                val pY = getY(activeTrip.pickupLat)
+            // 9. DRAW REAL-TIME NEARBY AVAILABLE DRIVER MARKERS
+            availableDrivers.forEach { driver ->
+                val dX = getX(driver.currentLng)
+                val dY = getY(driver.currentLat)
 
-                drawLine(
-                    color = AccentAmber,
-                    start = Offset(dX, dY),
-                    end = Offset(pX, pY),
-                    strokeWidth = 3.dp.toPx(),
-                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
-                        floatArrayOf(12f, 12f), 0f
-                    )
-                )
-            }
+                if (dX in -50f..(width + 50f) && dY in -50f..(height + 50f)) {
+                    // Record position for touch detection
+                    driverPositions.add(Pair(driver, Offset(dX, dY)))
 
-            // 5. Draw Idle Online Drivers
-            drivers.forEach { driver ->
-                if (driver.isOnline && driver.approvalStatus == "APPROVED" && (activeTrip == null || activeTrip.driverId != driver.id)) {
-                    val dX = getX(driver.currentLng)
-                    val dY = getY(driver.currentLat)
-                    val color = if (driver.vehicleType == "CAR") BrandBluePrimary else AccentAmber
+                    val isSelected = selectedDriverOnMap?.id == driver.id
+                    val baseColor = if (driver.vehicleType == "CAR") BrandBluePrimary else AccentAmber
 
-                    // Glowing ring
+                    // Live Pulsing Radar Ring around available driver
+                    val pulseRadius = (12.dp.toPx() * pulseScale) * (if (isSelected) 1.4f else 1.0f)
                     drawCircle(
-                        color = color.copy(alpha = 0.25f),
+                        color = baseColor.copy(alpha = pulseAlpha * (if (isSelected) 0.9f else 0.5f)),
+                        radius = pulseRadius,
+                        center = Offset(dX, dY)
+                    )
+
+                    if (isSelected) {
+                        // Outer selection halo
+                        drawCircle(
+                            color = Color(0xFFFFD54F),
+                            radius = 16.dp.toPx(),
+                            center = Offset(dX, dY)
+                        )
+                    }
+
+                    // Google Maps Pin Marker Base
+                    drawCircle(
+                        color = Color.White,
+                        radius = 10.dp.toPx(),
+                        center = Offset(dX, dY)
+                    )
+                    drawCircle(
+                        color = baseColor,
                         radius = 8.dp.toPx(),
                         center = Offset(dX, dY)
                     )
-                    // Inner core
-                    drawCircle(
-                        color = color,
-                        radius = 4.dp.toPx(),
-                        center = Offset(dX, dY)
+
+                    // Calculate distance & ETA to passenger for overhead pill
+                    val distKm = calculateDistance(passengerLat, passengerLng, driver.currentLat, driver.currentLng)
+                    val etaMin = (distKm * 3.5 + 2).toInt().coerceAtLeast(1)
+                    val driverFirstName = driver.name.split(" ")[0]
+                    val labelText = "$driverFirstName • ${etaMin}m"
+
+                    // Overhead Driver ETA Pill on Canvas
+                    val labelStyle = TextStyle(
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BrandBlueDark
+                    )
+                    val measured = textMeasurer.measure(labelText, labelStyle)
+                    val pillWidth = measured.size.width + 16.dp.toPx()
+                    val pillHeight = measured.size.height + 8.dp.toPx()
+                    val pillLeft = dX - pillWidth / 2f
+                    val pillTop = dY - 22.dp.toPx() - pillHeight
+
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = 0.95f),
+                        topLeft = Offset(pillLeft, pillTop),
+                        size = androidx.compose.ui.geometry.Size(pillWidth, pillHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(12f, 12f)
+                    )
+                    drawRoundRect(
+                        color = baseColor.copy(alpha = 0.6f),
+                        topLeft = Offset(pillLeft, pillTop),
+                        size = androidx.compose.ui.geometry.Size(pillWidth, pillHeight),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(12f, 12f),
+                        style = Stroke(width = 2f)
+                    )
+                    drawText(
+                        textLayoutResult = measured,
+                        topLeft = Offset(pillLeft + 8.dp.toPx(), pillTop + 4.dp.toPx())
                     )
                 }
             }
 
-            // 6. Draw Active Driving Vehicle (or passenger location)
-            if (activeTrip != null && activeTrip.status in listOf("ACCEPTED", "ARRIVED", "EN_ROUTE")) {
-                val driverLat = simulatedDriverLat ?: activeTrip.pickupLat
-                val driverLng = simulatedDriverLng ?: activeTrip.pickupLng
-                val dX = getX(driverLng)
-                val dY = getY(driverLat)
-                val color = if (activeTrip.vehicleType == "CAR") BrandBluePrimary else AccentAmber
+            // 10. Draw Passenger Location (Blue Dot with Pulsing Halo)
+            if (!isActiveRide) {
+                val pX = getX(passengerLng)
+                val pY = getY(passengerLat)
 
-                // Animate bigger glowing circle
                 drawCircle(
-                    color = color.copy(alpha = 0.35f),
-                    radius = 14.dp.toPx(),
-                    center = Offset(dX, dY)
+                    color = Color(0xFF4285F4).copy(alpha = 0.25f),
+                    radius = 18.dp.toPx(),
+                    center = Offset(pX, pY)
                 )
                 drawCircle(
                     color = Color.White,
                     radius = 8.dp.toPx(),
-                    center = Offset(dX, dY)
-                )
-                drawCircle(
-                    color = color,
-                    radius = 6.dp.toPx(),
-                    center = Offset(dX, dY)
-                )
-            } else {
-                // Just draw current Passenger dot resting at home/default
-                val pX = getX(passengerLng)
-                val pY = getY(passengerLat)
-                drawCircle(
-                    color = BrandBlueSecondary.copy(alpha = 0.3f),
-                    radius = 12.dp.toPx(),
                     center = Offset(pX, pY)
                 )
                 drawCircle(
-                    color = BrandBlueSecondary,
-                    radius = 5.dp.toPx(),
+                    color = Color(0xFF4285F4),
+                    radius = 6.dp.toPx(),
                     center = Offset(pX, pY)
                 )
             }
         }
 
-        // Top right indicator
+        // =========================================================
+        // GOOGLE MAPS CONTROLS & OVERLAYS
+        // =========================================================
+
+        // Top Header Bar Overlay
+        Column(
+            modifier = Modifier
+                .zIndex(10f)
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.White.copy(alpha = 0.95f),
+                shape = RoundedCornerShape(12.dp),
+                shadowElevation = 3.dp,
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Google Maps Branding Badge
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF4285F4),
+                            modifier = Modifier.size(22.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("G", color = Color.White, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
+                            Text("Google Maps", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = BrandBlueDark)
+                            Text("${availableDrivers.size} drivers nearby", fontSize = 9.5.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Map Layer & Traffic Switches
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Traffic Layer Toggle Button
+                        FilterChip(
+                            selected = showTraffic,
+                            onClick = { showTraffic = !showTraffic },
+                            label = { Text("Traffic", fontSize = 9.5.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Traffic,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = if (showTraffic) Color.White else NeutralGray
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFF44336),
+                                selectedLabelColor = Color.White
+                            ),
+                            modifier = Modifier.height(26.dp)
+                        )
+
+                        // Map Type Dropdown Button
+                        Box {
+                            IconButton(
+                                onClick = { showMapTypeMenu = !showMapTypeMenu },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Layers, contentDescription = "Map Style", tint = BrandBluePrimary, modifier = Modifier.size(18.dp))
+                            }
+
+                            DropdownMenu(
+                                expanded = showMapTypeMenu,
+                                onDismissRequest = { showMapTypeMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Default Roadmap") },
+                                    leadingIcon = { Icon(Icons.Default.Map, contentDescription = null) },
+                                    onClick = { mapType = "ROADMAP"; showMapTypeMenu = false }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Satellite View") },
+                                    leadingIcon = { Icon(Icons.Default.Satellite, contentDescription = null) },
+                                    onClick = { mapType = "SATELLITE"; showMapTypeMenu = false }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Terrain View") },
+                                    leadingIcon = { Icon(Icons.Default.Terrain, contentDescription = null) },
+                                    onClick = { mapType = "TERRAIN"; showMapTypeMenu = false }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Vehicle Category Filter Chips Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    onClick = { vehicleFilter = "ALL" },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (vehicleFilter == "ALL") BrandBluePrimary else Color.White.copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.3f)),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.height(26.dp)
+                ) {
+                    Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "All (${availableDrivers.size})",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (vehicleFilter == "ALL") Color.White else BrandBlueDark
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = { vehicleFilter = "CAR" },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (vehicleFilter == "CAR") BrandBluePrimary else Color.White.copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.3f)),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.height(26.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DirectionsCar,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = if (vehicleFilter == "CAR") Color.White else BrandBluePrimary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Cars ($carCount)",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (vehicleFilter == "CAR") Color.White else BrandBlueDark
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = { vehicleFilter = "TRICYCLE" },
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (vehicleFilter == "TRICYCLE") AccentAmber else Color.White.copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, AccentAmber.copy(alpha = 0.3f)),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier.height(26.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TwoWheeler,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = if (vehicleFilter == "TRICYCLE") Color.White else AccentAmber
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Motorbikes ($bikeCount)",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (vehicleFilter == "TRICYCLE") Color.White else BrandBlueDark
+                        )
+                    }
+                }
+            }
+        }
+
+        // Floating Map Controls (Zoom & Recenter) on the Right Side
+        Column(
+            modifier = Modifier
+                .zIndex(10f)
+                .align(Alignment.CenterEnd)
+                .padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                onClick = { zoomLevel = (zoomLevel + 0.3f).coerceAtMost(2.5f) },
+                shape = CircleShape,
+                color = Color.White,
+                shadowElevation = 4.dp,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Add, contentDescription = "Zoom In", tint = BrandBlueDark, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            Surface(
+                onClick = { zoomLevel = (zoomLevel - 0.3f).coerceAtLeast(0.8f) },
+                shape = CircleShape,
+                color = Color.White,
+                shadowElevation = 4.dp,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Remove, contentDescription = "Zoom Out", tint = BrandBlueDark, modifier = Modifier.size(16.dp))
+                }
+            }
+
+            Surface(
+                onClick = { zoomLevel = 1.0f },
+                shape = CircleShape,
+                color = Color.White,
+                shadowElevation = 4.dp,
+                modifier = Modifier.size(30.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.MyLocation, contentDescription = "Recenter", tint = BrandBluePrimary, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+
+        // Google Maps Watermark Footer (Bottom Left)
         Row(
             modifier = Modifier
-                .padding(8.dp)
-                .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(8.dp))
-                .border(0.5.dp, BrandBluePrimary.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-                .align(Alignment.TopEnd),
+                .align(Alignment.BottomStart)
+                .padding(start = 12.dp, bottom = if (selectedDriverOnMap != null) 140.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = "info",
-                tint = BrandBlueDark,
-                modifier = Modifier.size(12.dp)
+            Text(
+                text = "Google Maps",
+                fontWeight = FontWeight.Bold,
+                fontSize = 10.sp,
+                color = if (mapType == "SATELLITE") Color.White.copy(alpha = 0.8f) else Color.DarkGray.copy(alpha = 0.7f)
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "Live WayGo Map",
-                color = BrandBlueDark,
-                fontWeight = FontWeight.Bold,
-                fontSize = 9.sp
+                text = "• Map data ©2026 Google",
+                fontSize = 8.5.sp,
+                color = if (mapType == "SATELLITE") Color.LightGray.copy(alpha = 0.7f) else NeutralGray
             )
         }
 
-        // Real-time progress visualizer HUD Overlay
-        if (isActiveRide) {
-            val trip = activeTrip!!
-            val driverLat = simulatedDriverLat ?: trip.pickupLat
-            val driverLng = simulatedDriverLng ?: trip.pickupLng
+        // =========================================================
+        // SELECTED DRIVER QUICK CARD SHEET OVERLAY
+        // =========================================================
+        AnimatedVisibility(
+            visible = selectedDriverOnMap != null,
+            enter = fadeIn() + androidx.compose.animation.slideInVertically { it },
+            exit = fadeOut() + androidx.compose.animation.slideOutVertically { it },
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            selectedDriverOnMap?.let { selectedDriver ->
+                val distKm = calculateDistance(passengerLat, passengerLng, selectedDriver.currentLat, selectedDriver.currentLng)
+                val etaMin = (distKm * 3.5 + 2).toInt().coerceAtLeast(1)
 
-            val distanceToPickup = calculateDistance(driverLat, driverLng, trip.pickupLat, trip.pickupLng)
-            val distanceToDropoff = calculateDistance(driverLat, driverLng, trip.dropoffLat, trip.dropoffLng)
-
-            val (displayDist, statusLabel) = if (trip.status == "ACCEPTED") {
-                Pair(distanceToPickup, "Driver approaching pickup")
-            } else if (trip.status == "ARRIVED") {
-                Pair(0.0, "Driver at your pickup location")
-            } else {
-                Pair(distanceToDropoff, "In transit to destination")
-            }
-
-            val trackProgress = when (trip.status) {
-                "ACCEPTED" -> (progress / 0.35f).coerceIn(0f, 1f)
-                "ARRIVED" -> 1.0f
-                "EN_ROUTE" -> ((progress - 0.38f) / 0.62f).coerceIn(0f, 1f)
-                else -> 1.0f
-            }
-
-            Card(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(10.dp)
-                    .fillMaxWidth()
-                    .semantics { testTag = "realtime_progress_hud" },
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.15f))
-            ) {
-                Column(
+                Card(
                     modifier = Modifier
-                        .padding(12.dp)
                         .fillMaxWidth()
+                        .padding(8.dp)
+                        .testTag("driver_map_card_${selectedDriver.id}"),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.2f))
                 ) {
-                    // HUD Header
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-                            val pulseAlpha by infiniteTransition.animateFloat(
-                                initialValue = 0.4f,
-                                targetValue = 1.0f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(800, easing = LinearEasing),
-                                    repeatMode = RepeatMode.Reverse
-                                ),
-                                label = "pulse_alpha"
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(SuccessGreen.copy(alpha = pulseAlpha))
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = statusLabel,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                color = BrandBlueDark
-                            )
-                        }
-
-                        Text(
-                            text = if (trip.status == "ARRIVED") "Ready" else String.format("%.2f km left", displayDist),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = BrandBluePrimary
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // Progress Track Bar
-                    BoxWithConstraints(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(28.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val maxWidthPx = constraints.maxWidth
-                        val density = LocalDensity.current
-                        val maxWidthDp = with(density) { maxWidthPx.toDp() }
-
-                        // Background line
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                                .clip(CircleShape)
-                                .background(BrandBlueLight)
-                        )
-
-                        // Filled active progress line
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(trackProgress)
-                                .height(4.dp)
-                                .background(BrandBluePrimary)
-                                .align(Alignment.CenterStart)
-                        )
-
-                        // End node circles
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.Center)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Start Node Icon
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
-                                    .border(1.5.dp, BrandBlueSecondary, CircleShape)
-                                    .align(Alignment.CenterStart),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = if (trip.status == "ACCEPTED") Icons.Default.MyLocation else Icons.Default.Place,
-                                    contentDescription = "start_node",
-                                    tint = BrandBlueSecondary,
-                                    modifier = Modifier.size(10.dp)
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(BrandBluePrimary.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (selectedDriver.vehicleType == "CAR") Icons.Default.DirectionsCar else Icons.Default.TwoWheeler,
+                                        contentDescription = null,
+                                        tint = BrandBluePrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(10.dp))
+
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(selectedDriver.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandBlueDark)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(Icons.Default.Verified, contentDescription = "Verified", tint = SuccessGreen, modifier = Modifier.size(14.dp))
+                                    }
+                                    Text(
+                                        text = "${if (selectedDriver.vehicleType == "CAR") "Yellow Taxi Sedan" else "Tricycle / Moto"} • ${selectedDriver.vehiclePlate}",
+                                        fontSize = 11.sp,
+                                        color = NeutralGray
+                                    )
+                                }
                             }
 
-                            // End Node Icon
-                            Box(
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
-                                    .border(1.5.dp, if (trip.status == "ACCEPTED") SuccessGreen else ErrorRed, CircleShape)
-                                    .align(Alignment.CenterEnd),
-                                contentAlignment = Alignment.Center
+                            IconButton(
+                                onClick = { selectedDriverOnMap = null },
+                                modifier = Modifier.size(24.dp)
                             ) {
-                                Icon(
-                                    imageVector = if (trip.status == "ACCEPTED") Icons.Default.CheckCircle else Icons.Default.Place,
-                                    contentDescription = "end_node",
-                                    tint = if (trip.status == "ACCEPTED") SuccessGreen else ErrorRed,
-                                    modifier = Modifier.size(10.dp)
-                                )
+                                Icon(Icons.Default.Close, contentDescription = "Close", tint = NeutralGray, modifier = Modifier.size(16.dp))
                             }
                         }
 
-                        // Sliding Active Driver Vehicle Icon
-                        val iconSize = 22.dp
-                        val maxOffset = maxWidthDp - iconSize
-                        val currentOffset = maxOffset * trackProgress
+                        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
 
-                        Box(
-                            modifier = Modifier
-                                .offset(x = currentOffset)
-                                .size(iconSize)
-                                .clip(CircleShape)
-                                .background(BrandBluePrimary)
-                                .border(1.dp, Color.White, CircleShape)
-                                .align(Alignment.CenterStart),
-                            contentAlignment = Alignment.Center
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.DirectionsCar,
-                                contentDescription = "Driver Sliding Indicator",
-                                tint = Color.White,
-                                modifier = Modifier.size(12.dp)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("${selectedDriver.rating} ★ (120+ trips)", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = BrandBlueDark)
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = BrandBluePrimary.copy(alpha = 0.08f),
+                                border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.2f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.AccessTime, contentDescription = null, tint = BrandBluePrimary, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "${String.format("%.1f", distKm)} km • ~$etaMin min away",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BrandBluePrimary
+                                    )
+                                }
+                            }
                         }
-                    }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Labels below progress track
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (trip.status == "ACCEPTED") "Driver Dispatch" else "Pickup Location",
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = NeutralGray
-                        )
-                        Text(
-                            text = if (trip.status == "ACCEPTED") "Your Location" else "Destination",
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = NeutralGray
-                        )
+                        if (onSelectDriver != null) {
+                            Button(
+                                onClick = {
+                                    onSelectDriver.invoke(selectedDriver)
+                                    selectedDriverOnMap = null
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(36.dp)
+                                    .testTag("request_ride_with_driver_btn"),
+                                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.DirectionsCar, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Request Ride with ${selectedDriver.name.split(" ")[0]}", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
+
+// Simple tuple helper
+private data class Tuple6<A, B, C, D, E, F>(
+    val a: A, val b: B, val c: C, val d: D, val e: E, val f: F
+)
