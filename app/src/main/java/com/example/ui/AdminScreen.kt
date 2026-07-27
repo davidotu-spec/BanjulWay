@@ -1,6 +1,7 @@
 package com.example.ui
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -8,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -15,9 +17,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.DriverEntity
@@ -37,7 +43,54 @@ fun AdminScreen(
     val profile by viewModel.userProfile.collectAsState()
     val scheduledRides by viewModel.allScheduledRides.collectAsState()
 
+    val isAdminLoggedIn by viewModel.isAdminLoggedIn.collectAsState()
+    val adminEmail by viewModel.adminEmail.collectAsState()
+    val adminPassword by viewModel.adminPassword.collectAsState()
+    val adminAuthError by viewModel.adminAuthError.collectAsState()
+    val isAdminAuthenticating by viewModel.isAdminAuthenticating.collectAsState()
+    val adminUserEmail by viewModel.adminUserEmail.collectAsState()
+    val adminUserRole by viewModel.adminUserRole.collectAsState()
+
+    val oidcStatusMessage by viewModel.oidcStatusMessage.collectAsState()
+    val isOidcAuthenticating by viewModel.isOidcAuthenticating.collectAsState()
+    val lastOidcResult by viewModel.lastOidcResult.collectAsState()
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as? android.app.Activity
+
     var activeAdminTab by remember { mutableStateOf("METRICS") } // "METRICS", "DRIVERS", "SUPPORT", "SCHEDULED"
+
+    // If Admin is not logged in via Email, display the Enterprise Admin Email Login Gate
+    if (!isAdminLoggedIn) {
+        AdminEmailLoginView(
+            email = adminEmail,
+            password = adminPassword,
+            authError = adminAuthError,
+            isAuthenticating = isAdminAuthenticating,
+            oidcStatusMessage = oidcStatusMessage,
+            isOidcAuthenticating = isOidcAuthenticating,
+            lastOidcResult = lastOidcResult,
+            onEmailChange = { viewModel.setAdminEmail(it) },
+            onPasswordChange = { viewModel.setAdminPassword(it) },
+            onLoginClick = { viewModel.loginAdminWithEmail() },
+            onOidcLoginClick = { providerId, email ->
+                viewModel.loginWithOidcProvider(
+                    activity = activity,
+                    providerId = providerId,
+                    desiredEmail = email,
+                    targetRoleContext = "ADMIN"
+                )
+            },
+            onQuickCredentialSelect = { email, pass ->
+                viewModel.setAdminEmail(email)
+                viewModel.setAdminPassword(pass)
+                viewModel.loginAdminWithEmail(email, pass)
+            },
+            onOpenSectionSheet = onOpenSectionSheet,
+            onSwitchToPassenger = { viewModel.setRole("PASSENGER") }
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -58,7 +111,7 @@ fun AdminScreen(
                                 .size(42.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    androidx.compose.ui.graphics.Brush.linearGradient(
+                                    Brush.linearGradient(
                                         colors = listOf(BrandBluePrimary, BrandBlueDark)
                                     )
                                 ),
@@ -78,7 +131,7 @@ fun AdminScreen(
                                     text = "Admin Panel",
                                     color = BrandBlueDark,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 16.sp,
+                                    fontSize = 15.sp,
                                     letterSpacing = (-0.3).sp
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -90,15 +143,29 @@ fun AdminScreen(
                                 )
                             }
                             Text(
-                                text = "System Control • Tap to switch section",
-                                color = NeutralGray,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
+                                text = "$adminUserEmail • $adminUserRole",
+                                color = SuccessGreen,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 },
                 actions = {
+                    AssistChip(
+                        onClick = { viewModel.logoutAdmin() },
+                        label = { Text("Sign Out", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        leadingIcon = {
+                            Icon(Icons.Default.Logout, contentDescription = "Sign Out Admin", modifier = Modifier.size(14.dp))
+                        },
+                        colors = AssistChipDefaults.assistChipColors(
+                            containerColor = ErrorRed.copy(alpha = 0.1f),
+                            labelColor = ErrorRed,
+                            leadingIconContentColor = ErrorRed
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("admin_logout_btn")
+                    )
                     IconButton(
                         onClick = { onOpenSectionSheet?.invoke() },
                         modifier = Modifier.testTag("admin_open_section_sheet_btn")
@@ -682,6 +749,531 @@ fun AdminSchedulesTab(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminEmailLoginView(
+    email: String,
+    password: String,
+    authError: String,
+    isAuthenticating: Boolean,
+    oidcStatusMessage: String = "",
+    isOidcAuthenticating: Boolean = false,
+    lastOidcResult: com.example.data.OidcAuthResult? = null,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onLoginClick: () -> Unit,
+    onOidcLoginClick: (providerId: String, desiredEmail: String) -> Unit = { _, _ -> },
+    onQuickCredentialSelect: (String, String) -> Unit,
+    onOpenSectionSheet: (() -> Unit)? = null,
+    onSwitchToPassenger: () -> Unit
+) {
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0F172A),
+                        Color(0xFF1E293B),
+                        Color(0xFF0F172A)
+                    )
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Brand Badge Icon
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(BrandBluePrimary, BrandBlueDark)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AdminPanelSettings,
+                        contentDescription = "Admin Security Shield",
+                        tint = Color.White,
+                        modifier = Modifier.size(38.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "WayGo Enterprise Portal",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Fleet Operations & System Administration",
+                    fontSize = 13.sp,
+                    color = Color(0xFF94A3B8),
+                    fontWeight = FontWeight.Medium
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // RBAC Chip Tag
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xFF1E293B),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VerifiedUser,
+                            contentDescription = "RBAC Security",
+                            tint = SuccessGreen,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "ROLE: ADMIN (OIDC / OAuth 2.0 Enforced)",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE2E8F0)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // FIREBASE AUTH OIDC PROVIDER SSO CARD
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                    border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.VpnKey,
+                                contentDescription = "OIDC SSO",
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Firebase Auth OIDC SSO Login",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+
+                        Text(
+                            text = "OAuth 2.0 / OpenID Connect Provider with JWT Claim RBAC",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF94A3B8)
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Trigger OIDC Login Button
+                        Button(
+                            onClick = {
+                                onOidcLoginClick("oidc.waygo-sso", email.ifBlank { "admin@waygo.com" })
+                            },
+                            enabled = !isOidcAuthenticating,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("oidc_sso_login_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isOidcAuthenticating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Authenticating OIDC...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            } else {
+                                Icon(Icons.Default.Security, contentDescription = "OIDC", modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Sign In with Corporate OIDC Provider", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Post-Auth Role Differentiation Demo Buttons
+                        Text(
+                            text = "Test Post-Authentication Role Differentiation:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFCBD5E1)
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Admin OIDC Tenant
+                            OutlinedButton(
+                                onClick = {
+                                    onOidcLoginClick("oidc.waygo-sso", "admin.ops@waygo.com")
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("oidc_test_admin_btn"),
+                                border = BorderStroke(1.dp, SuccessGreen),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = SuccessGreen),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("OIDC Admin\n(Role: ADMIN)", fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            }
+
+                            // Passenger OIDC Tenant
+                            OutlinedButton(
+                                onClick = {
+                                    onOidcLoginClick("oidc.waygo-sso", "passenger.rider@waygo.com")
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("oidc_test_passenger_btn"),
+                                border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF59E0B)),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("OIDC Rider\n(Role: PASSENGER)", fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                            }
+                        }
+
+                        if (oidcStatusMessage.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFF1E293B),
+                                border = BorderStroke(1.dp, Color(0xFF334155)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = oidcStatusMessage,
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF38BDF8),
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+
+                        if (lastOidcResult != null) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFF0284C7).copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, Color(0xFF0284C7)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text("JWT Claims & Role Verification:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("• User ID: ${lastOidcResult.uid}", fontSize = 10.5.sp, color = Color(0xFFE2E8F0))
+                                    Text("• Verified Email: ${lastOidcResult.email}", fontSize = 10.5.sp, color = Color(0xFFE2E8F0))
+                                    Text("• OIDC Provider ID: ${lastOidcResult.providerId}", fontSize = 10.5.sp, color = Color(0xFFE2E8F0))
+                                    Text("• JWT Claim Role: ${lastOidcResult.customClaims["role"] ?: "N/A"}", fontSize = 10.5.sp, color = Color(0xFFE2E8F0))
+                                    Text("• Evaluated Post-Auth Role: ${lastOidcResult.resolvedRole}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Standard Password Sign In Divider / Heading
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Divider(modifier = Modifier.weight(1f), color = Color(0xFF334155))
+                    Text(
+                        text = " OR PASSWORD LOGIN ",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF64748B),
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    Divider(modifier = Modifier.weight(1f), color = Color(0xFF334155))
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Login Form Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Admin Email Sign In",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = BrandBlueDark
+                        )
+
+                        Text(
+                            text = "Access live dispatch, driver verifications & analytics",
+                            fontSize = 12.sp,
+                            color = NeutralGray
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Email Field
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = onEmailChange,
+                            label = { Text("Corporate Admin Email") },
+                            placeholder = { Text("admin@waygo.com") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Email, contentDescription = "Email Icon", tint = BrandBluePrimary)
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_email_input"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f)
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Password Field
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = onPasswordChange,
+                            label = { Text("Password") },
+                            placeholder = { Text("••••••••") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Lock, contentDescription = "Password Icon", tint = BrandBluePrimary)
+                            },
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = "Toggle password visibility",
+                                        tint = NeutralGray
+                                    )
+                                }
+                            },
+                            singleLine = true,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_password_input"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f)
+                            )
+                        )
+
+                        if (authError.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = ErrorRed.copy(alpha = 0.1f),
+                                border = BorderStroke(1.dp, ErrorRed.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.ErrorOutline, contentDescription = "Error", tint = ErrorRed)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = authError,
+                                        color = ErrorRed,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Login Submit Button
+                        Button(
+                            onClick = onLoginClick,
+                            enabled = !isAuthenticating,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .testTag("admin_login_submit_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                            shape = RoundedCornerShape(14.dp),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                        ) {
+                            if (isAuthenticating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Authenticating Admin...", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            } else {
+                                Icon(Icons.Default.Login, contentDescription = "Sign in", modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Sign In to Admin Console", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Quick Demo Admin Credentials Chip Bar
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "⚡ Quick Demo Admin Profiles (Tap to Login)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF94A3B8)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Chip 1: Super Admin
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = BrandBluePrimary.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, BrandBluePrimary),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onQuickCredentialSelect("admin@waygo.com", "admin123") }
+                                    .testTag("admin_demo_chip_super")
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("Super Admin", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("admin@waygo.com", fontSize = 9.5.sp, color = BrandBlueLight)
+                                }
+                            }
+
+                            // Chip 2: Fleet Ops
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = SuccessGreen.copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, SuccessGreen),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onQuickCredentialSelect("ops@waygo.gm", "admin123") }
+                                    .testTag("admin_demo_chip_ops")
+                                    ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("Fleet Ops", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("ops@waygo.gm", fontSize = 9.5.sp, color = SuccessGreen)
+                                }
+                            }
+
+                            // Chip 3: Support
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFFA855F7).copy(alpha = 0.2f),
+                                border = BorderStroke(1.dp, Color(0xFFA855F7)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onQuickCredentialSelect("support@waygo.com", "admin123") }
+                                    .testTag("admin_demo_chip_support")
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("Disputes", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Text("support@waygo.com", fontSize = 9.5.sp, color = Color(0xFFE9D5FF))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Switch section back to Passenger / Driver button
+                OutlinedButton(
+                    onClick = { onSwitchToPassenger() },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
+                    border = BorderStroke(1.dp, Color(0xFF334155))
+                ) {
+                    Icon(Icons.Default.DirectionsCar, contentDescription = "Passenger Mode", modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Return to Passenger App", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }

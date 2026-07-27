@@ -119,13 +119,15 @@ fun NightShiftErgonomicsWidget(
             ) {
                 // LIGHT BUTTON
                 val lightActive = themeMode == ThemeMode.LIGHT
+                val lightBg by androidx.compose.animation.animateColorAsState(
+                    targetValue = if (lightActive) (if (isDark) Color(0xFF334155) else PureWhite) else Color.Transparent,
+                    label = "lightThemeBg"
+                )
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            if (lightActive) (if (isDark) Color(0xFF334155) else PureWhite) else Color.Transparent
-                        )
+                        .background(lightBg)
                         .border(
                             width = if (lightActive) 1.dp else 0.dp,
                             color = if (lightActive) (if (isDark) Color(0xFF475569) else Color.LightGray.copy(alpha = 0.5f)) else Color.Transparent,
@@ -157,13 +159,15 @@ fun NightShiftErgonomicsWidget(
 
                 // DARK BUTTON
                 val darkActive = themeMode == ThemeMode.DARK
+                val darkBg by androidx.compose.animation.animateColorAsState(
+                    targetValue = if (darkActive) (if (isDark) Color(0xFF334155) else PureWhite) else Color.Transparent,
+                    label = "darkThemeBg"
+                )
                 Box(
                     modifier = Modifier
                         .weight(1.2f)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            if (darkActive) (if (isDark) Color(0xFF334155) else PureWhite) else Color.Transparent
-                        )
+                        .background(darkBg)
                         .border(
                             width = if (darkActive) 1.dp else 0.dp,
                             color = if (darkActive) (if (isDark) Color(0xFF475569) else Color.LightGray.copy(alpha = 0.5f)) else Color.Transparent,
@@ -195,13 +199,15 @@ fun NightShiftErgonomicsWidget(
 
                 // SYSTEM BUTTON
                 val systemActive = themeMode == ThemeMode.SYSTEM
+                val systemBg by androidx.compose.animation.animateColorAsState(
+                    targetValue = if (systemActive) (if (isDark) Color(0xFF334155) else PureWhite) else Color.Transparent,
+                    label = "systemThemeBg"
+                )
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            if (systemActive) (if (isDark) Color(0xFF334155) else PureWhite) else Color.Transparent
-                        )
+                        .background(systemBg)
                         .border(
                             width = if (systemActive) 1.dp else 0.dp,
                             color = if (systemActive) (if (isDark) Color(0xFF475569) else Color.LightGray.copy(alpha = 0.5f)) else Color.Transparent,

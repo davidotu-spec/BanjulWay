@@ -132,15 +132,15 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
         ) {
             activeNotif?.let { notif ->
                 Card(
+                    onClick = {
+                        // If they click on it, take them directly to the Driver segment to manage!
+                        viewModel.setRole("DRIVER")
+                        viewModel.setActiveDriver(notif.driverId)
+                        viewModel.dismissActivePushNotification()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("heads_up_notification_hud")
-                        .clickable {
-                            // If they click on it, take them directly to the Driver segment to manage!
-                            viewModel.setRole("DRIVER")
-                            viewModel.setActiveDriver(notif.driverId)
-                            viewModel.dismissActivePushNotification()
-                        },
+                        .testTag("heads_up_notification_hud"),
                     colors = CardDefaults.cardColors(containerColor = BrandBlueDark),
                     shape = RoundedCornerShape(16.dp),
                     elevation = CardDefaults.cardElevation(12.dp),
@@ -420,14 +420,16 @@ fun SectionOptionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val animatedBg by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isSelected) BrandBluePrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
+        label = "sectionCardBg"
+    )
+
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) BrandBluePrimary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
-        ),
+        colors = CardDefaults.cardColors(containerColor = animatedBg),
         border = androidx.compose.foundation.BorderStroke(
             width = if (isSelected) 1.5.dp else 1.dp,
             color = if (isSelected) BrandBluePrimary else Color.LightGray.copy(alpha = 0.3f)
@@ -488,8 +490,14 @@ fun RoleSegmentButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val backColor = if (isActive) BrandBluePrimary else Color.Transparent
-    val contentColor = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val backColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isActive) BrandBluePrimary else Color.Transparent,
+        label = "roleButtonBg"
+    )
+    val contentColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isActive) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+        label = "roleButtonFg"
+    )
 
     Box(
         modifier = modifier

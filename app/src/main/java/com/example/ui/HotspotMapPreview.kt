@@ -163,11 +163,15 @@ fun HotspotMapPreview(
         ) {
             listOf("ALL", "Banjul", "Kanifing").forEach { region ->
                 val isSelected = selectedRegion == region
+                val filterBg by androidx.compose.animation.animateColorAsState(
+                    targetValue = if (isSelected) BrandBluePrimary else BrandBlueLight,
+                    label = "filterBg"
+                )
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) BrandBluePrimary else BrandBlueLight)
+                        .background(filterBg)
                         .clickable { selectedRegion = region }
                         .padding(vertical = 6.dp)
                         .testTag("filter_btn_$region"),
@@ -404,12 +408,11 @@ fun HotspotMapPreview(
                 }
                 
                 Card(
+                    onClick = { selectedHotspot = hotspot },
                     colors = CardDefaults.cardColors(
                         containerColor = if (isSelected) BrandBlueLight else PureWhite
                     ),
-                    modifier = Modifier
-                        .clickable { selectedHotspot = hotspot }
-                        .testTag("hotspot_item_${hotspot.id}"),
+                    modifier = Modifier.testTag("hotspot_item_${hotspot.id}"),
                     border = androidx.compose.foundation.BorderStroke(
                         width = if (isSelected) 1.5.dp else 1.dp,
                         color = if (isSelected) BrandBluePrimary else Color.LightGray.copy(alpha = 0.3f)

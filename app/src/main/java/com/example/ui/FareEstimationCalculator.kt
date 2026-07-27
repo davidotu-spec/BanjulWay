@@ -594,9 +594,8 @@ fun WayGoFareEstimatorDialog(
                             if (r < 100) 100 else r
                         }
                         Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { selectedVehicleType = "CAR" },
+                            onClick = { selectedVehicleType = "CAR" },
+                            modifier = Modifier.weight(1f),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (selectedVehicleType == "CAR") BrandBluePrimary.copy(alpha = 0.08f) else PureWhite
                             ),
@@ -638,9 +637,8 @@ fun WayGoFareEstimatorDialog(
                             if (r < 50) 50 else r
                         }
                         Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { selectedVehicleType = "TRICYCLE" },
+                            onClick = { selectedVehicleType = "TRICYCLE" },
+                            modifier = Modifier.weight(1f),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (selectedVehicleType == "TRICYCLE") BrandBluePrimary.copy(alpha = 0.08f) else PureWhite
                             ),

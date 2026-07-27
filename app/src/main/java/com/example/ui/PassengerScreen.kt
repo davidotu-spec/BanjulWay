@@ -41,6 +41,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.DriverEntity
@@ -81,6 +83,10 @@ fun PassengerScreen(
 
     var activeTabSubState by remember { mutableStateOf("HOME") } // "HOME", "HISTORY", "PROFILE", "CHAT"
 
+    val smsGatewayStatus by viewModel.smsGatewayStatus.collectAsState()
+    val isRealSmsSent by viewModel.isRealSmsSent.collectAsState()
+    val isOtpSending by viewModel.isOtpSending.collectAsState()
+
     // Authentication Gate
     if (!isLoggedIn) {
         val context = androidx.compose.ui.platform.LocalContext.current
@@ -89,8 +95,13 @@ fun PassengerScreen(
             otpRequested = otpRequested,
             generatedOtp = generatedOtp,
             authError = authError,
+            smsGatewayStatus = smsGatewayStatus,
+            isRealSmsSent = isRealSmsSent,
+            isOtpSending = isOtpSending,
             onRequestOtp = { viewModel.requestOtp(activity, it) },
-            onVerifyOtp = { viewModel.verifyOtp(it) }
+            onVerifyOtp = { viewModel.verifyOtp(it) },
+            onEmailLogin = { email, pass -> viewModel.loginPassengerWithEmail(email, pass) },
+            onEmailRegister = { email, pass, name -> viewModel.registerPassengerWithEmail(email, pass, name) }
         )
         return
     }
@@ -308,8 +319,13 @@ fun PassengerAuthView(
     otpRequested: Boolean,
     generatedOtp: String,
     authError: String,
+    smsGatewayStatus: String = "⚡ Twilio SMS Gateway Active",
+    isRealSmsSent: Boolean = false,
+    isOtpSending: Boolean = false,
     onRequestOtp: (String) -> Unit,
-    onVerifyOtp: (String) -> Unit
+    onVerifyOtp: (String) -> Unit,
+    onEmailLogin: (String, String) -> Unit = { _, _ -> },
+    onEmailRegister: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val countries = remember {
         listOf(
@@ -327,8 +343,14 @@ fun PassengerAuthView(
     var selectedCountry by remember { mutableStateOf(countries[0]) }
     var showCountryDialog by remember { mutableStateOf(false) }
 
+    var authMethod by remember { mutableStateOf("PHONE") } // "PHONE" or "EMAIL"
+    var emailInput by remember { mutableStateOf("passenger@waygo.com") }
+    var passwordInput by remember { mutableStateOf("pass123") }
+    var nameInput by remember { mutableStateOf("David Otu") }
+    var isRegisterMode by remember { mutableStateOf(false) }
+    var passwordVisible by remember { mutableStateOf(false) }
+
     // Gambian numbers are usually 7 digits long (e.g. 7712345).
-    // Let's seed with a typical local pattern for rapid convenience.
     var phoneInput by remember { mutableStateOf("7712345") }
     var otpInput by remember { mutableStateOf("") }
     
@@ -458,41 +480,223 @@ fun PassengerAuthView(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     if (!otpRequested) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        // Auth Method Selector Tab
+                        SingleChoiceSegmentedButtonRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(BrandBluePrimary.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
+                            SegmentedButton(
+                                selected = authMethod == "PHONE",
+                                onClick = { authMethod = "PHONE" },
+                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.PersonAdd,
-                                    contentDescription = "Create Account Icon",
-                                    tint = BrandBluePrimary,
-                                    modifier = Modifier.size(20.dp)
+                                Text("📱 SMS OTP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                            SegmentedButton(
+                                selected = authMethod == "EMAIL",
+                                onClick = { authMethod = "EMAIL" },
+                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2)
+                            ) {
+                                Text("✉️ Email Sign In", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (authMethod == "EMAIL") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = if (isRegisterMode) "Passenger Account Registration" else "Passenger Email Sign In",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandBlueDark
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Sign in using your WayGo Passenger email credentials.",
+                                    fontSize = 12.sp,
+                                    color = NeutralGray,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                if (isRegisterMode) {
+                                    OutlinedTextField(
+                                        value = nameInput,
+                                        onValueChange = { nameInput = it },
+                                        label = { Text("Full Name") },
+                                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = BrandBluePrimary) },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth().testTag("passenger_register_name_input"),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = BrandBluePrimary,
+                                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                            focusedContainerColor = BrandBlueLight,
+                                            unfocusedContainerColor = BrandBlueLight,
+                                            focusedTextColor = BrandBlueDark,
+                                            unfocusedTextColor = BrandBlueDark
+                                        ),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                }
+
+                                OutlinedTextField(
+                                    value = emailInput,
+                                    onValueChange = { emailInput = it },
+                                    label = { Text("Email Address") },
+                                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandBluePrimary) },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().testTag("passenger_email_input"),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = BrandBluePrimary,
+                                        unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                        focusedContainerColor = BrandBlueLight,
+                                        unfocusedContainerColor = BrandBlueLight,
+                                        focusedTextColor = BrandBlueDark,
+                                        unfocusedTextColor = BrandBlueDark
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                OutlinedTextField(
+                                    value = passwordInput,
+                                    onValueChange = { passwordInput = it },
+                                    label = { Text("Password") },
+                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = BrandBluePrimary) },
+                                    trailingIcon = {
+                                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                            Icon(
+                                                imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = "Toggle password visibility",
+                                                tint = NeutralGray
+                                            )
+                                        }
+                                    },
+                                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().testTag("passenger_password_input"),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = BrandBluePrimary,
+                                        unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                        focusedContainerColor = BrandBlueLight,
+                                        unfocusedContainerColor = BrandBlueLight,
+                                        focusedTextColor = BrandBlueDark,
+                                        unfocusedTextColor = BrandBlueDark
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Text("Quick Demo Accounts:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NeutralGray)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    listOf(
+                                        "passenger@waygo.com" to "Demo Passenger",
+                                        "david.otu@mixxd.org" to "David Otu (VIP)",
+                                        "rider.fatou@waygo.gm" to "Fatou Bah"
+                                    ).forEach { (demoEmail, label) ->
+                                        AssistChip(
+                                            onClick = {
+                                                emailInput = demoEmail
+                                                passwordInput = "pass123"
+                                                nameInput = label.substringBefore(" ")
+                                            },
+                                            label = { Text("👤 $label ($demoEmail)", fontSize = 10.5.sp, fontWeight = FontWeight.Bold) },
+                                            colors = AssistChipDefaults.assistChipColors(
+                                                containerColor = BrandBlueLight,
+                                                labelColor = BrandBlueDark
+                                            ),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+
+                                if (authError.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(text = authError, color = ErrorRed, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Button(
+                                    onClick = {
+                                        if (isRegisterMode) {
+                                            onEmailRegister(emailInput, passwordInput, nameInput)
+                                        } else {
+                                            onEmailLogin(emailInput, passwordInput)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp)
+                                        .testTag("passenger_email_submit_btn"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Icon(if (isRegisterMode) Icons.Default.PersonAdd else Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(if (isRegisterMode) "Register Passenger Account" else "Sign In with Email", fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                TextButton(
+                                    onClick = { isRegisterMode = !isRegisterMode }
+                                ) {
+                                    Text(
+                                        text = if (isRegisterMode) "Already have an account? Sign In" else "New to WayGo? Create an Email Account",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BrandBluePrimary
+                                    )
+                                }
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(BrandBluePrimary.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PersonAdd,
+                                        contentDescription = "Create Account Icon",
+                                        tint = BrandBluePrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Text(
+                                    text = "Create Account / Sign In",
+                                    fontSize = 19.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandBlueDark
                                 )
                             }
+                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Create Account / Sign In",
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BrandBlueDark
+                                text = "Enter your Gambian mobile number. We'll send an SMS verification code to connect you instantly.",
+                                fontSize = 13.sp,
+                                color = NeutralGray,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 18.sp
                             )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Enter your Gambian mobile number. We'll send an SMS verification code to connect you instantly.",
-                            fontSize = 13.sp,
-                            color = NeutralGray,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 18.sp
-                        )
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                            Spacer(modifier = Modifier.height(24.dp))
 
                         // Live Telecom Carrier Tag
                         detectedCarrier?.let { carrier ->
@@ -734,12 +938,41 @@ fun PassengerAuthView(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(24.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // SMS Gateway Indicator Badge
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (isRealSmsSent) SuccessGreen.copy(alpha = 0.12f) else BrandBlueLight,
+                            border = BorderStroke(1.dp, if (isRealSmsSent) SuccessGreen else BrandBluePrimary.copy(alpha = 0.2f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isRealSmsSent) Icons.Default.CheckCircle else Icons.Default.Sensors,
+                                    contentDescription = "Gateway icon",
+                                    tint = if (isRealSmsSent) SuccessGreen else BrandBluePrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = smsGatewayStatus,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isRealSmsSent) SuccessGreen else BrandBlueDark
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
                             onClick = {
                                 onRequestOtp("${selectedCountry.code} $phoneInput")
                             },
+                            enabled = !isOtpSending,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp)
@@ -748,12 +981,28 @@ fun PassengerAuthView(
                             shape = RoundedCornerShape(14.dp),
                             elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                         ) {
-                            Text(
-                                text = "Request Verification SMS",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PureWhite
-                            )
+                            if (isOtpSending) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    color = PureWhite,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Dispatching via Gateway...",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PureWhite
+                                )
+                            } else {
+                                Text(
+                                    text = "Request Verification SMS",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PureWhite
+                                )
+                            }
+                        }
                         }
                     } else {
                         // Enter verification code state
@@ -765,21 +1014,30 @@ fun PassengerAuthView(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "A secure verification code has been dispatched to ${selectedCountry.code} $phoneInput",
+                            text = if (isRealSmsSent)
+                                "📱 Live SMS dispatched to ${selectedCountry.code} $phoneInput via Twilio SMS Gateway!"
+                            else
+                                "A secure verification code has been dispatched to ${selectedCountry.code} $phoneInput",
                             fontSize = 13.sp,
-                            color = NeutralGray,
+                            color = if (isRealSmsSent) SuccessGreen else NeutralGray,
+                            fontWeight = if (isRealSmsSent) FontWeight.Bold else FontWeight.Normal,
                             textAlign = TextAlign.Center
                         )
 
                         Spacer(modifier = Modifier.height(18.dp))
 
-                        // Interactive High-fidelity SMS Notification Panel
+                        // Interactive SMS Notification Panel
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp)),
-                            colors = CardDefaults.cardColors(containerColor = BrandBlueLight.copy(alpha = 0.95f)),
-                            border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.1f))
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isRealSmsSent) SuccessGreen.copy(alpha = 0.15f) else BrandBlueLight.copy(alpha = 0.95f)
+                            ),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (isRealSmsSent) SuccessGreen else BrandBluePrimary.copy(alpha = 0.1f)
+                            )
                         ) {
                             Row(
                                 modifier = Modifier
@@ -791,7 +1049,7 @@ fun PassengerAuthView(
                                     modifier = Modifier
                                         .size(36.dp)
                                         .clip(CircleShape)
-                                        .background(BrandBlueSecondary),
+                                        .background(if (isRealSmsSent) SuccessGreen else BrandBlueSecondary),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -809,7 +1067,7 @@ fun PassengerAuthView(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "WayGo Gateway",
+                                            text = if (isRealSmsSent) "Twilio SMS Gateway" else "WayGo SMS Gateway",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
                                             color = BrandBlueDark
@@ -822,14 +1080,17 @@ fun PassengerAuthView(
                                     }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Your login code is $generatedOtp. Valid for 5 minutes.",
+                                        text = if (isRealSmsSent)
+                                            "SMS delivered to phone. Security code: $generatedOtp"
+                                        else
+                                            "Your login code is $generatedOtp. Valid for 5 minutes.",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = BrandBluePrimary
                                     )
                                 }
                             }
-                            // Tap to autofill button inside simulated SMS message
+                            // Tap to autofill button inside SMS message
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -849,7 +1110,7 @@ fun PassengerAuthView(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Tap to Autofill OTP Code",
+                                        text = "Tap to Autofill OTP Code ($generatedOtp)",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = BrandBluePrimary
@@ -1246,9 +1507,8 @@ fun HomeScreenContent(
                                 }
                                 
                                 Card(
-                                    modifier = Modifier
-                                        .clickable { selectedSavedPlaceForOptions = place }
-                                        .testTag("saved_place_item_${place.label.lowercase()}"),
+                                    onClick = { selectedSavedPlaceForOptions = place },
+                                    modifier = Modifier.testTag("saved_place_item_${place.label.lowercase()}"),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = CardDefaults.cardColors(containerColor = BrandBluePrimary.copy(alpha = 0.05f)),
                                     border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.15f))
@@ -1286,9 +1546,8 @@ fun HomeScreenContent(
                             // Add Saved Place Button
                             item {
                                 Card(
-                                    modifier = Modifier
-                                        .clickable { showAddSavedPlaceDialog = true }
-                                        .testTag("add_saved_place_button"),
+                                    onClick = { showAddSavedPlaceDialog = true },
+                                    modifier = Modifier.testTag("add_saved_place_button"),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
@@ -1641,9 +1900,9 @@ fun HomeScreenContent(
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Card(
+                                onClick = { selectVehicleType = "CAR" },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clickable { selectVehicleType = "CAR" }
                                     .testTag("vehicle_car_select"),
                                 shape = RoundedCornerShape(24.dp),
                                 border = androidx.compose.foundation.BorderStroke(
@@ -1651,7 +1910,7 @@ fun HomeScreenContent(
                                     color = if (selectVehicleType == "CAR") BrandBluePrimary else Color(0xFFE2E8F0)
                                 ),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (selectVehicleType == "CAR") BrandBluePrimary.copy(alpha = 0.05f) else PureWhite
+                                    containerColor = if (selectVehicleType == "CAR") BrandBluePrimary.copy(alpha = 0.08f) else PureWhite
                                 )
                             ) {
                                 Column(
@@ -1672,9 +1931,9 @@ fun HomeScreenContent(
                             }
 
                             Card(
+                                onClick = { selectVehicleType = "TRICYCLE" },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clickable { selectVehicleType = "TRICYCLE" }
                                     .testTag("vehicle_tuk_select"),
                                 shape = RoundedCornerShape(24.dp),
                                 border = androidx.compose.foundation.BorderStroke(
@@ -1682,7 +1941,7 @@ fun HomeScreenContent(
                                     color = if (selectVehicleType == "TRICYCLE") BrandBluePrimary else Color(0xFFE2E8F0)
                                 ),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (selectVehicleType == "TRICYCLE") BrandBluePrimary.copy(alpha = 0.05f) else PureWhite
+                                    containerColor = if (selectVehicleType == "TRICYCLE") BrandBluePrimary.copy(alpha = 0.08f) else PureWhite
                                 )
                             ) {
                                 Column(
@@ -1714,9 +1973,8 @@ fun HomeScreenContent(
                         ) {
                             listOf("CASH", "WAVE", "FLUTTERWAVE", "STRIPE").forEach { method ->
                                 Card(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { selectPaymentMethod = method },
+                                    onClick = { selectPaymentMethod = method },
+                                    modifier = Modifier.weight(1f),
                                     colors = CardDefaults.cardColors(
                                         containerColor = if (selectPaymentMethod == method) BrandBluePrimary else BrandBlueLight
                                     )
@@ -1881,9 +2139,8 @@ fun HomeScreenContent(
                                             listOf("Today", "Tomorrow", "In 2 days").forEach { item ->
                                                 val isSelected = selectedScheduleDate == item
                                                 Card(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .clickable { selectedScheduleDate = item },
+                                                    onClick = { selectedScheduleDate = item },
+                                                    modifier = Modifier.weight(1f),
                                                     colors = CardDefaults.cardColors(
                                                         containerColor = if (isSelected) BrandBluePrimary else BrandBlueLight
                                                     )
@@ -3571,10 +3828,9 @@ fun ProfileScreenContent(
         ) {
             // Activity Card
             Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable { activeAccountTab = "TRIP_LOG" },
+                onClick = { activeAccountTab = "TRIP_LOG" },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (activeAccountTab == "TRIP_LOG") BrandBlueLight else MaterialTheme.colorScheme.surface
                 ),
@@ -3600,10 +3856,9 @@ fun ProfileScreenContent(
 
             // Wallet Card
             Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable { activeAccountTab = "PAYMENT" },
+                onClick = { activeAccountTab = "PAYMENT" },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (activeAccountTab == "PAYMENT") BrandBlueLight else MaterialTheme.colorScheme.surface
                 ),
@@ -3629,10 +3884,9 @@ fun ProfileScreenContent(
 
             // Inbox Card
             Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable { activeAccountTab = "INBOX" },
+                onClick = { activeAccountTab = "INBOX" },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (activeAccountTab == "INBOX") BrandBlueLight else MaterialTheme.colorScheme.surface
                 ),
@@ -3658,10 +3912,9 @@ fun ProfileScreenContent(
 
             // Safety Card
             Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .clickable { activeAccountTab = "SAFETY" },
+                onClick = { activeAccountTab = "SAFETY" },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (activeAccountTab == "SAFETY") BrandBlueLight else MaterialTheme.colorScheme.surface
                 ),
@@ -3794,10 +4047,9 @@ fun ProfileScreenContent(
 
                 // 2. DRIVER HUB ROW
                 Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.setRole("DRIVER") },
+                    onClick = { viewModel.setRole("DRIVER") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.4f))
                 ) {
@@ -3843,10 +4095,9 @@ fun ProfileScreenContent(
 
                 // 3. ADMIN PANEL ROW
                 Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.setRole("ADMIN") },
+                    onClick = { viewModel.setRole("ADMIN") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.4f))
                 ) {
@@ -4387,13 +4638,12 @@ fun ProfileScreenContent(
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             inboxMessages.forEach { msg ->
                                 Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            inboxMessages = inboxMessages.map {
-                                                if (it.id == msg.id) it.copy(isRead = true) else it
-                                            }
-                                        },
+                                    onClick = {
+                                        inboxMessages = inboxMessages.map {
+                                            if (it.id == msg.id) it.copy(isRead = true) else it
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(
                                         containerColor = if (!msg.isRead) BrandBluePrimary.copy(alpha = 0.06f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.02f)
                                     ),

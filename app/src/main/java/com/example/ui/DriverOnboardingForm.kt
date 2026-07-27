@@ -296,9 +296,9 @@ fun DriverOnboardingForm(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Card(
+                                    onClick = { vehicleType = "CAR" },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .clickable { vehicleType = "CAR" }
                                         .testTag("onboard_select_car"),
                                     border = BorderStroke(
                                         width = if (vehicleType == "CAR") 2.dp else 1.dp,
@@ -330,9 +330,9 @@ fun DriverOnboardingForm(
                                 }
 
                                 Card(
+                                    onClick = { vehicleType = "TRICYCLE" },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .clickable { vehicleType = "TRICYCLE" }
                                         .testTag("onboard_select_tricycle"),
                                     border = BorderStroke(
                                         width = if (vehicleType == "TRICYCLE") 2.dp else 1.dp,
