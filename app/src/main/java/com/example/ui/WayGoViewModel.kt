@@ -699,6 +699,144 @@ class WayGoViewModel(
         }
     }
 
+    fun registerDriverWithEmail(
+        email: String,
+        pass: String,
+        name: String,
+        vehicleType: String,
+        vehiclePlate: String,
+        licenseNum: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        val cleanEmail = email.trim()
+        val cleanPass = pass.trim()
+        if (cleanEmail.isBlank()) {
+            _driverAuthError.value = "Please enter your driver account email."
+            onError("Please enter your driver account email.")
+            return
+        }
+        if (cleanPass.isBlank() || cleanPass.length < 6) {
+            _driverAuthError.value = "Password must be at least 6 characters."
+            onError("Password must be at least 6 characters.")
+            return
+        }
+        if (name.isBlank()) {
+            _driverAuthError.value = "Please enter your full name."
+            onError("Please enter your full name.")
+            return
+        }
+
+        _driverAuthError.value = ""
+        _isDriverAuthenticating.value = true
+
+        viewModelScope.launch {
+            delay(600)
+            FirebaseAuthManager.createUserWithEmail(
+                email = cleanEmail,
+                pass = cleanPass,
+                onSuccess = {
+                    val newDriverId = "drv_${System.currentTimeMillis()}"
+                    val newDriver = DriverEntity(
+                        id = newDriverId,
+                        name = name.ifBlank { "Fleet Driver" },
+                        phone = "+220 7123456",
+                        vehicleType = vehicleType.ifBlank { "Taxi Sedan" },
+                        vehiclePlate = vehiclePlate.ifBlank { "BJL 9988 X" },
+                        rating = 5.0f,
+                        approvalStatus = "APPROVED",
+                        isOnline = true,
+                        currentLat = 13.4549,
+                        currentLng = -16.5790,
+                        driverLicense = licenseNum.ifBlank { "GAM-DL-9082" },
+                        isVerified = true
+                    )
+                    viewModelScope.launch {
+                        repository.saveDriver(newDriver)
+                        _activeDriverId.value = newDriverId
+                        _isDriverLoggedIn.value = true
+                        _driverEmail.value = cleanEmail
+                        _isDriverAuthenticating.value = false
+                        _driverAuthError.value = ""
+                        _driverPassword.value = ""
+                        onSuccess()
+                    }
+                },
+                onError = { errorMsg ->
+                    _isDriverAuthenticating.value = false
+                    _driverAuthError.value = errorMsg
+                    onError(errorMsg)
+                }
+            )
+        }
+    }
+
+    fun socialLoginPassenger(provider: String) {
+        _authError.value = ""
+        _isPassengerAuthenticating.value = true
+        viewModelScope.launch {
+            delay(500)
+            _isUserLoggedIn.value = true
+            _isPassengerAuthenticating.value = false
+            val providerName = provider.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            val currentProf = userProfile.value
+            repository.saveUserProfile(
+                UserProfileEntity(
+                    id = "current_passenger",
+                    name = "$providerName User",
+                    phone = currentProf?.phone ?: "+220 7712345",
+                    email = "rider@${provider.lowercase()}.com",
+                    gender = currentProf?.gender ?: "Male",
+                    mobileMoneyNumber = currentProf?.mobileMoneyNumber ?: "+220 7712345",
+                    savedHome = currentProf?.savedHome ?: "Westfield Monument, Serrekunda",
+                    savedWork = currentProf?.savedWork ?: "Banjul Sea Port",
+                    avatarIndex = 0
+                )
+            )
+        }
+    }
+
+    fun registerAdminWithEmail(
+        email: String,
+        pass: String,
+        name: String,
+        inviteCode: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val cleanEmail = email.trim()
+        val cleanPass = pass.trim()
+        val cleanInvite = inviteCode.trim()
+
+        if (cleanEmail.isBlank()) {
+            onError("Please enter corporate admin email.")
+            return
+        }
+        if (cleanPass.length < 6) {
+            onError("Password must be at least 6 characters.")
+            return
+        }
+        if (cleanInvite.isBlank()) {
+            onError("Admin Registration Invite Code is required (e.g. WAYGO-ADMIN-2026).")
+            return
+        }
+
+        viewModelScope.launch {
+            delay(600)
+            FirebaseAuthManager.createUserWithEmail(
+                email = cleanEmail,
+                pass = cleanPass,
+                onSuccess = {
+                    _currentRole.value = "ADMIN"
+                    onSuccess()
+                },
+                onError = { errorMsg ->
+                    onError(errorMsg)
+                }
+            )
+        }
+    }
+
     fun logoutDriver() {
         _isDriverLoggedIn.value = false
         _driverAuthError.value = ""

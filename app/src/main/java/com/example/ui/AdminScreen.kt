@@ -86,6 +86,16 @@ fun AdminScreen(
                 viewModel.setAdminPassword(pass)
                 viewModel.loginAdminWithEmail(email, pass)
             },
+            onRegisterAdminSubmit = { email, pass, name, inviteCode, onError ->
+                viewModel.registerAdminWithEmail(
+                    email = email,
+                    pass = pass,
+                    name = name,
+                    inviteCode = inviteCode,
+                    onSuccess = { },
+                    onError = onError
+                )
+            },
             onOpenSectionSheet = onOpenSectionSheet,
             onSwitchToPassenger = { viewModel.setRole("PASSENGER") }
         )
@@ -769,10 +779,15 @@ fun AdminEmailLoginView(
     onLoginClick: () -> Unit,
     onOidcLoginClick: (providerId: String, desiredEmail: String) -> Unit = { _, _ -> },
     onQuickCredentialSelect: (String, String) -> Unit,
+    onRegisterAdminSubmit: (email: String, pass: String, name: String, inviteCode: String, onError: (String) -> Unit) -> Unit = { _, _, _, _, _ -> },
     onOpenSectionSheet: (() -> Unit)? = null,
     onSwitchToPassenger: () -> Unit
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+    var isAdminRegisterMode by remember { mutableStateOf(false) }
+    var adminNameInput by remember { mutableStateOf("") }
+    var adminInviteCodeInput by remember { mutableStateOf("WAYGO-ADMIN-2026") }
+    var localRegistrationError by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -1051,20 +1066,81 @@ fun AdminEmailLoginView(
                             .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // Mode Switcher Tabs
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(BrandBlueLight)
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Button(
+                                onClick = { isAdminRegisterMode = false },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (!isAdminRegisterMode) BrandBluePrimary else Color.Transparent,
+                                    contentColor = if (!isAdminRegisterMode) Color.White else BrandBlueDark
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                elevation = null
+                            ) {
+                                Text("Sign In", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = { isAdminRegisterMode = true },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isAdminRegisterMode) BrandBluePrimary else Color.Transparent,
+                                    contentColor = if (isAdminRegisterMode) Color.White else BrandBlueDark
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                elevation = null
+                            ) {
+                                Text("Register Admin", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         Text(
-                            text = "Admin Email Sign In",
+                            text = if (isAdminRegisterMode) "Admin Registration (Invite Required)" else "Admin Email Sign In",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = BrandBlueDark
                         )
 
                         Text(
-                            text = "Access live dispatch, driver verifications & analytics",
+                            text = if (isAdminRegisterMode) "Register a new admin account with corporate invite token" else "Access live dispatch, driver verifications & analytics",
                             fontSize = 12.sp,
-                            color = NeutralGray
+                            color = NeutralGray,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        if (isAdminRegisterMode) {
+                            OutlinedTextField(
+                                value = adminNameInput,
+                                onValueChange = { adminNameInput = it },
+                                label = { Text("Admin Full Name") },
+                                placeholder = { Text("e.g. David Otu") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Person, contentDescription = null, tint = BrandBluePrimary)
+                                },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("admin_register_name_input"),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = BrandBluePrimary,
+                                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f)
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
 
                         // Email Field
                         OutlinedTextField(
@@ -1087,7 +1163,7 @@ fun AdminEmailLoginView(
                             )
                         )
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // Password Field
                         OutlinedTextField(
@@ -1120,7 +1196,31 @@ fun AdminEmailLoginView(
                             )
                         )
 
-                        if (authError.isNotBlank()) {
+                        if (isAdminRegisterMode) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedTextField(
+                                value = adminInviteCodeInput,
+                                onValueChange = { adminInviteCodeInput = it },
+                                label = { Text("Invite Token / Reg Code") },
+                                placeholder = { Text("WAYGO-ADMIN-2026") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Key, contentDescription = null, tint = BrandBluePrimary)
+                                },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("admin_invite_code_input"),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = BrandBluePrimary,
+                                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f)
+                                )
+                            )
+                        }
+
+                        val displayedError = if (isAdminRegisterMode && localRegistrationError.isNotBlank()) localRegistrationError else authError
+
+                        if (displayedError.isNotBlank()) {
                             Spacer(modifier = Modifier.height(14.dp))
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -1135,7 +1235,7 @@ fun AdminEmailLoginView(
                                     Icon(Icons.Default.ErrorOutline, contentDescription = "Error", tint = ErrorRed)
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = authError,
+                                        text = displayedError,
                                         color = ErrorRed,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
@@ -1146,9 +1246,23 @@ fun AdminEmailLoginView(
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Login Submit Button
+                        // Submit Button
                         Button(
-                            onClick = onLoginClick,
+                            onClick = {
+                                if (isAdminRegisterMode) {
+                                    localRegistrationError = ""
+                                    onRegisterAdminSubmit(
+                                        email,
+                                        password,
+                                        adminNameInput,
+                                        adminInviteCodeInput
+                                    ) { err ->
+                                        localRegistrationError = err
+                                    }
+                                } else {
+                                    onLoginClick()
+                                }
+                            },
                             enabled = !isAuthenticating,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1165,11 +1279,20 @@ fun AdminEmailLoginView(
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Authenticating Admin...", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("Processing...", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             } else {
-                                Icon(Icons.Default.Login, contentDescription = "Sign in", modifier = Modifier.size(18.dp))
+                                Icon(
+                                    imageVector = if (isAdminRegisterMode) Icons.Default.HowToReg else Icons.Default.Login,
+                                    contentDescription = "Submit",
+                                    modifier = Modifier.size(18.dp)
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Sign In to Admin Console", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text(
+                                    text = if (isAdminRegisterMode) "Register Admin Account" else "Sign In to Admin Console",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
                             }
                         }
                     }

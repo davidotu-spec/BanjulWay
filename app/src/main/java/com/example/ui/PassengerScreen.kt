@@ -101,7 +101,8 @@ fun PassengerScreen(
             onRequestOtp = { viewModel.requestOtp(activity, it) },
             onVerifyOtp = { viewModel.verifyOtp(it) },
             onEmailLogin = { email, pass -> viewModel.loginPassengerWithEmail(email, pass) },
-            onEmailRegister = { email, pass, name -> viewModel.registerPassengerWithEmail(email, pass, name) }
+            onEmailRegister = { email, pass, name -> viewModel.registerPassengerWithEmail(email, pass, name) },
+            onSocialLogin = { provider -> viewModel.socialLoginPassenger(provider) }
         )
         return
     }
@@ -325,7 +326,8 @@ fun PassengerAuthView(
     onRequestOtp: (String) -> Unit,
     onVerifyOtp: (String) -> Unit,
     onEmailLogin: (String, String) -> Unit = { _, _ -> },
-    onEmailRegister: (String, String, String) -> Unit = { _, _, _ -> }
+    onEmailRegister: (String, String, String) -> Unit = { _, _, _ -> },
+    onSocialLogin: (String) -> Unit = {}
 ) {
     val countries = remember {
         listOf(
@@ -646,6 +648,31 @@ fun PassengerAuthView(
                                     Icon(if (isRegisterMode) Icons.Default.PersonAdd else Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(if (isRegisterMode) "Register Passenger Account" else "Sign In with Email", fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { onSocialLogin("Google") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BrandBlueDark)
+                                    ) {
+                                        Text("🌐 Google", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { onSocialLogin("Apple") },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BrandBlueDark)
+                                    ) {
+                                        Text("🍎 Apple ID", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(8.dp))

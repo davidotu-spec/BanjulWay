@@ -81,6 +81,18 @@ fun DriverScreen(
                 viewModel.setDriverPassword(pass)
                 viewModel.loginDriverWithEmail(email, pass)
             },
+            onRegisterSubmit = { email, pass, name, vehicleType, vehiclePlate, licenseNum, onError ->
+                viewModel.registerDriverWithEmail(
+                    email = email,
+                    pass = pass,
+                    name = name,
+                    vehicleType = vehicleType,
+                    vehiclePlate = vehiclePlate,
+                    licenseNum = licenseNum,
+                    onSuccess = { },
+                    onError = onError
+                )
+            },
             isDark = isDark
         )
         return
@@ -1418,18 +1430,22 @@ fun DriverScreen(
                                         .background(Color.LightGray.copy(alpha = 0.3f))
                                 ) {
                                     if (totalGmd > 0f) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .weight(banjulRatio)
-                                                .background(BrandBlueSecondary)
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .weight(kanifingRatio)
-                                                .background(SuccessGreen)
-                                        )
+                                        if (banjulRatio > 0f) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .weight(banjulRatio)
+                                                    .background(BrandBlueSecondary)
+                                            )
+                                        }
+                                        if (kanifingRatio > 0f) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .weight(kanifingRatio)
+                                                    .background(SuccessGreen)
+                                            )
+                                        }
                                     } else {
                                         Box(
                                             modifier = Modifier
@@ -3061,9 +3077,16 @@ fun DriverAuthView(
     onPassChange: (String) -> Unit,
     onLoginSubmit: () -> Unit,
     onQuickDriverSelect: (String, String) -> Unit,
+    onRegisterSubmit: (email: String, pass: String, name: String, vehicleType: String, vehiclePlate: String, licenseNum: String, onError: (String) -> Unit) -> Unit = { _, _, _, _, _, _, _ -> },
     isDark: Boolean
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+    var isDriverRegisterMode by remember { mutableStateOf(false) }
+    var driverNameInput by remember { mutableStateOf("") }
+    var vehicleTypeInput by remember { mutableStateOf("Mercedes C-Class Sedan") }
+    var vehiclePlateInput by remember { mutableStateOf("BJL 8844 X") }
+    var licenseNumInput by remember { mutableStateOf("GAM-DL-9082") }
+    var localError by remember { mutableStateOf("") }
 
     Box(
         modifier = Modifier
@@ -3102,9 +3125,44 @@ fun DriverAuthView(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // Mode Selector Tabs
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isDark) Color(0xFF0F172A) else BrandBlueLight)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Button(
+                        onClick = { isDriverRegisterMode = false },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (!isDriverRegisterMode) BrandBluePrimary else Color.Transparent,
+                            contentColor = if (!isDriverRegisterMode) PureWhite else (if (isDark) Color(0xFF94A3B8) else BrandBlueDark)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        elevation = null
+                    ) {
+                        Text("Sign In", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { isDriverRegisterMode = true },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (isDriverRegisterMode) BrandBluePrimary else Color.Transparent, contentColor = if (isDriverRegisterMode) PureWhite else (if (isDark) Color(0xFF94A3B8) else BrandBlueDark)),
+                        shape = RoundedCornerShape(10.dp),
+                        elevation = null
+                    ) {
+                        Text("Apply / Register", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
                 Text(
-                    text = "Driver Portal Sign In",
-                    fontSize = 22.sp,
+                    text = if (isDriverRegisterMode) "Fleet Driver Registration" else "Driver Portal Sign In",
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = if (isDark) PureWhite else BrandBlueDark
                 )
@@ -3112,13 +3170,37 @@ fun DriverAuthView(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = "Enter your driver account credentials to access online dispatch & trip management.",
-                    fontSize = 13.sp,
+                    text = if (isDriverRegisterMode) "Register your vehicle and details to join the WayGo Gambia driver fleet." else "Enter your driver account credentials to access online dispatch & trip management.",
+                    fontSize = 12.5.sp,
                     color = if (isDark) Color(0xFF94A3B8) else NeutralGray,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (isDriverRegisterMode) {
+                    OutlinedTextField(
+                        value = driverNameInput,
+                        onValueChange = { driverNameInput = it },
+                        label = { Text("Full Name") },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = BrandBluePrimary) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("driver_register_name_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                            focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
+                            unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
+                            focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
+                            unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 OutlinedTextField(
                     value = email,
@@ -3140,7 +3222,7 @@ fun DriverAuthView(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = pass,
@@ -3172,46 +3254,136 @@ fun DriverAuthView(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                if (isDriverRegisterMode) {
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Text(
-                    text = "Quick Select Fleet Driver:",
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isDark) Color(0xFF94A3B8) else NeutralGray
-                )
-                Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = vehicleTypeInput,
+                        onValueChange = { vehicleTypeInput = it },
+                        label = { Text("Vehicle Type & Model") },
+                        placeholder = { Text("e.g. Mercedes Sedan, Toyota Rav4") },
+                        leadingIcon = { Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = BrandBluePrimary) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("driver_vehicle_type_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                            focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
+                            unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
+                            focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
+                            unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
 
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf(
-                        Triple("driver.alieu@waygo.com", "Alieu Jallow (Mercedes Sedan)", "driver123"),
-                        Triple("driver.fatou@waygo.com", "Fatou Jallow (Toyota Rav4)", "driver123"),
-                        Triple("driver.modou@waygo.com", "Modou Touray (Nissan Van)", "driver123")
-                    ).forEach { (drvEmail, label, drvPass) ->
-                        AssistChip(
-                            onClick = { onQuickDriverSelect(drvEmail, drvPass) },
-                            label = { Text("🚗 $label", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = if (isDark) Color(0xFF334155) else BrandBlueLight,
-                                labelColor = if (isDark) PureWhite else BrandBlueDark
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = vehiclePlateInput,
+                        onValueChange = { vehiclePlateInput = it },
+                        label = { Text("License Plate Number") },
+                        placeholder = { Text("e.g. BJL 8844 X") },
+                        leadingIcon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = null, tint = BrandBluePrimary) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("driver_plate_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                            focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
+                            unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
+                            focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
+                            unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = licenseNumInput,
+                        onValueChange = { licenseNumInput = it },
+                        label = { Text("Driver's License Number") },
+                        placeholder = { Text("e.g. GAM-DL-9082") },
+                        leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = BrandBluePrimary) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("driver_license_input"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                            focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
+                            unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
+                            focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
+                            unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+
+                if (!isDriverRegisterMode) {
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Quick Select Fleet Driver:",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isDark) Color(0xFF94A3B8) else NeutralGray
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            Triple("driver.alieu@waygo.com", "Alieu Jallow (Mercedes Sedan)", "driver123"),
+                            Triple("driver.fatou@waygo.com", "Fatou Jallow (Toyota Rav4)", "driver123"),
+                            Triple("driver.modou@waygo.com", "Modou Touray (Nissan Van)", "driver123")
+                        ).forEach { (drvEmail, label, drvPass) ->
+                            AssistChip(
+                                onClick = { onQuickDriverSelect(drvEmail, drvPass) },
+                                label = { Text("🚗 $label", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = if (isDark) Color(0xFF334155) else BrandBlueLight,
+                                    labelColor = if (isDark) PureWhite else BrandBlueDark
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
 
-                if (authError.isNotEmpty()) {
+                val errToDisplay = if (isDriverRegisterMode && localError.isNotBlank()) localError else authError
+                if (errToDisplay.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text(text = authError, color = ErrorRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(text = errToDisplay, color = ErrorRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 Spacer(modifier = Modifier.height(18.dp))
 
                 Button(
-                    onClick = onLoginSubmit,
+                    onClick = {
+                        if (isDriverRegisterMode) {
+                            localError = ""
+                            onRegisterSubmit(
+                                email,
+                                pass,
+                                driverNameInput,
+                                vehicleTypeInput,
+                                vehiclePlateInput,
+                                licenseNumInput
+                            ) { err ->
+                                localError = err
+                            }
+                        } else {
+                            onLoginSubmit()
+                        }
+                    },
                     enabled = !isAuthenticating,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3227,11 +3399,11 @@ fun DriverAuthView(
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Authenticating Driver...", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PureWhite)
+                        Text("Processing Driver Request...", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PureWhite)
                     } else {
-                        Icon(Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(if (isDriverRegisterMode) Icons.Default.AppRegistration else Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sign In to Driver Portal", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isDriverRegisterMode) "Submit Application & Sign In" else "Sign In to Driver Portal", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
