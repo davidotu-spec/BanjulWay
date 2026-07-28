@@ -97,7 +97,8 @@ fun AdminScreen(
                 )
             },
             onOpenSectionSheet = onOpenSectionSheet,
-            onSwitchToPassenger = { viewModel.setRole("PASSENGER") }
+            onSwitchToPassenger = { viewModel.setRole("PASSENGER") },
+            onSelectRole = { role -> viewModel.setRole(role) }
         )
         return
     }
@@ -246,7 +247,7 @@ fun AdminScreen(
                 .background(BrandBlueLight)
         ) {
             when (activeAdminTab) {
-                "METRICS" -> AdminMetricsTab(drivers = drivers, trips = trips, passengerName = profile?.name ?: "David Otu")
+                "METRICS" -> AdminMetricsTab(drivers = drivers, trips = trips, passengerName = profile?.name ?: "John Doe")
                 "DRIVERS" -> AdminDriversVerificationTab(drivers = drivers, onApprove = { viewModel.approveDriver(it) }, onReject = { viewModel.rejectDriver(it) })
                 "SUPPORT" -> AdminSupportTab(messages = supportMsgs, onReply = { msg -> viewModel.sendSupportMsg("ADMIN", msg) })
                 "SCHEDULED" -> AdminSchedulesTab(
@@ -781,7 +782,8 @@ fun AdminEmailLoginView(
     onQuickCredentialSelect: (String, String) -> Unit,
     onRegisterAdminSubmit: (email: String, pass: String, name: String, inviteCode: String, onError: (String) -> Unit) -> Unit = { _, _, _, _, _ -> },
     onOpenSectionSheet: (() -> Unit)? = null,
-    onSwitchToPassenger: () -> Unit
+    onSwitchToPassenger: () -> Unit,
+    onSelectRole: (String) -> Unit = {}
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
     var isAdminRegisterMode by remember { mutableStateOf(false) }
@@ -851,7 +853,16 @@ fun AdminEmailLoginView(
                     fontWeight = FontWeight.Medium
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Role Section Switcher Tabs
+                AuthRoleSectionTabs(
+                    activeRole = "ADMIN",
+                    onSelectRole = onSelectRole,
+                    isDarkBg = true
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // RBAC Chip Tag
                 Surface(
@@ -1125,7 +1136,7 @@ fun AdminEmailLoginView(
                                 value = adminNameInput,
                                 onValueChange = { adminNameInput = it },
                                 label = { Text("Admin Full Name") },
-                                placeholder = { Text("e.g. David Otu") },
+                                placeholder = { Text("e.g. John Doe") },
                                 leadingIcon = {
                                     Icon(Icons.Default.Person, contentDescription = null, tint = BrandBluePrimary)
                                 },

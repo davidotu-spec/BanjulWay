@@ -93,6 +93,7 @@ fun DriverScreen(
                     onError = onError
                 )
             },
+            onSelectRole = { role -> viewModel.setRole(role) },
             isDark = isDark
         )
         return
@@ -3078,6 +3079,7 @@ fun DriverAuthView(
     onLoginSubmit: () -> Unit,
     onQuickDriverSelect: (String, String) -> Unit,
     onRegisterSubmit: (email: String, pass: String, name: String, vehicleType: String, vehiclePlate: String, licenseNum: String, onError: (String) -> Unit) -> Unit = { _, _, _, _, _, _, _ -> },
+    onSelectRole: (String) -> Unit = {},
     isDark: Boolean
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
@@ -3108,6 +3110,15 @@ fun DriverAuthView(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Role Section Switcher Tabs
+                AuthRoleSectionTabs(
+                    activeRole = "DRIVER",
+                    onSelectRole = onSelectRole,
+                    isDarkBg = isDark
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
                 Box(
                     modifier = Modifier
                         .size(56.dp)

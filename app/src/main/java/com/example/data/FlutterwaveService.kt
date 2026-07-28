@@ -88,7 +88,7 @@ object FlutterwaveManager {
             currency = "GMD", // Standard Gambia Dalasi
             redirectUrl = "https://standard-checkout-redirect.waygo.com/success",
             customer = FlutterwaveCustomer(
-                email = if (passengerEmail.isNotBlank()) passengerEmail else "davidotu@mixxd.org",
+                email = if (passengerEmail.isNotBlank()) passengerEmail else "johndoe@example.com",
                 phonenumber = passengerPhone,
                 name = passengerName
             ),

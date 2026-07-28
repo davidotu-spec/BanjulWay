@@ -192,7 +192,7 @@ object FirestoreManager {
             val simulatedHistory = listOf(
                 TripEntity(
                     id = "trip_cloud_1",
-                    passengerName = "David Otu",
+                    passengerName = "John Doe",
                     driverId = "drv_alieu",
                     driverName = "Alieu Ceesay",
                     vehicleType = "CAR",
@@ -213,7 +213,7 @@ object FirestoreManager {
                 ),
                 TripEntity(
                     id = "trip_cloud_2",
-                    passengerName = "David Otu",
+                    passengerName = "John Doe",
                     driverId = "drv_mariama",
                     driverName = "Mariama Jallow",
                     vehicleType = "TRICYCLE",
@@ -234,7 +234,7 @@ object FirestoreManager {
                 ),
                 TripEntity(
                     id = "trip_cloud_3",
-                    passengerName = "David Otu",
+                    passengerName = "John Doe",
                     driverId = "drv_bakary",
                     driverName = "Bakary Touray",
                     vehicleType = "CAR",

@@ -102,7 +102,8 @@ fun PassengerScreen(
             onVerifyOtp = { viewModel.verifyOtp(it) },
             onEmailLogin = { email, pass -> viewModel.loginPassengerWithEmail(email, pass) },
             onEmailRegister = { email, pass, name -> viewModel.registerPassengerWithEmail(email, pass, name) },
-            onSocialLogin = { provider -> viewModel.socialLoginPassenger(provider) }
+            onSocialLogin = { provider -> viewModel.socialLoginPassenger(provider) },
+            onSelectRole = { newRole -> viewModel.setRole(newRole) }
         )
         return
     }
@@ -316,6 +317,80 @@ fun SosDialog() {
 data class CountryCode(val code: String, val name: String, val flag: String, val lengthHint: String)
 
 @Composable
+fun AuthRoleSectionTabs(
+    activeRole: String,
+    onSelectRole: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    isDarkBg: Boolean = true
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (isDarkBg) PureWhite.copy(alpha = 0.12f) else BrandBlueLight,
+        border = BorderStroke(1.dp, if (isDarkBg) PureWhite.copy(alpha = 0.25f) else BrandBluePrimary.copy(alpha = 0.3f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(6.dp)
+        ) {
+            Text(
+                text = "SELECT YOUR ACCOUNT PORTAL:",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isDarkBg) PureWhite.copy(alpha = 0.8f) else NeutralGray,
+                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                listOf(
+                    Triple("PASSENGER", "Passenger", "🙋‍♂️"),
+                    Triple("DRIVER", "Driver Fleet", "🚗"),
+                    Triple("ADMIN", "Admin Portal", "🛡️")
+                ).forEach { (roleKey, label, icon) ->
+                    val isSelected = activeRole == roleKey
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSelected) BrandBluePrimary else Color.Transparent
+                            )
+                            .clickable { onSelectRole(roleKey) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(horizontal = 2.dp)
+                        ) {
+                            Text(
+                                text = icon,
+                                fontSize = 13.sp
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = label,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                color = if (isSelected) PureWhite else (if (isDarkBg) PureWhite.copy(alpha = 0.85f) else BrandBlueDark),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun PassengerAuthView(
     otpRequested: Boolean,
     generatedOtp: String,
@@ -327,7 +402,8 @@ fun PassengerAuthView(
     onVerifyOtp: (String) -> Unit,
     onEmailLogin: (String, String) -> Unit = { _, _ -> },
     onEmailRegister: (String, String, String) -> Unit = { _, _, _ -> },
-    onSocialLogin: (String) -> Unit = {}
+    onSocialLogin: (String) -> Unit = {},
+    onSelectRole: (String) -> Unit = {}
 ) {
     val countries = remember {
         listOf(
@@ -348,8 +424,8 @@ fun PassengerAuthView(
     var authMethod by remember { mutableStateOf("PHONE") } // "PHONE" or "EMAIL"
     var emailInput by remember { mutableStateOf("passenger@waygo.com") }
     var passwordInput by remember { mutableStateOf("pass123") }
-    var nameInput by remember { mutableStateOf("David Otu") }
-    var isRegisterMode by remember { mutableStateOf(false) }
+    var nameInput by remember { mutableStateOf("John Doe") }
+    var isRegisterMode by remember { mutableStateOf(true) }
     var passwordVisible by remember { mutableStateOf(false) }
 
     // Gambian numbers are usually 7 digits long (e.g. 7712345).
@@ -466,7 +542,16 @@ fun PassengerAuthView(
                 fontWeight = FontWeight.Medium
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Role Section Switcher Tabs
+            AuthRoleSectionTabs(
+                activeRole = "PASSENGER",
+                onSelectRole = onSelectRole,
+                isDarkBg = true
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Main Interactive Authentication Card
             Card(
@@ -603,7 +688,7 @@ fun PassengerAuthView(
                                 ) {
                                     listOf(
                                         "passenger@waygo.com" to "Demo Passenger",
-                                        "david.otu@mixxd.org" to "David Otu (VIP)",
+                                        "johndoe@example.com" to "John Doe (VIP)",
                                         "rider.fatou@waygo.gm" to "Fatou Bah"
                                     ).forEach { (demoEmail, label) ->
                                         AssistChip(
@@ -2059,8 +2144,8 @@ fun HomeScreenContent(
                                         isProcessingFlutterwave = true
                                         flutterwaveStatusMsg = "Preparing secure payment gateway..."
                                         coroutineScope.launch {
-                                            val pEmail = profile?.email ?: "davidotu@mixxd.org"
-                                            val pName = profile?.name ?: "David Otu"
+                                            val pEmail = profile?.email ?: "johndoe@example.com"
+                                            val pName = profile?.name ?: "John Doe"
                                             val pPhone = profile?.phone ?: "+220 771 2345"
                                             val txRef = "flw_ref_" + System.currentTimeMillis().toString().takeLast(6)
                                             val link = com.example.data.FlutterwaveManager.initiatePayment(
@@ -2083,8 +2168,8 @@ fun HomeScreenContent(
                                     isProcessingStripe = true
                                     stripeStatusMsg = "Preparing secure Stripe gateway..."
                                     coroutineScope.launch {
-                                        val pEmail = profile?.email ?: "davidotu@mixxd.org"
-                                        val pName = profile?.name ?: "David Otu"
+                                        val pEmail = profile?.email ?: "johndoe@example.com"
+                                        val pName = profile?.name ?: "John Doe"
                                         val pPhone = profile?.phone ?: "+220 771 2345"
                                         val txRef = "st_ref_" + System.currentTimeMillis().toString().takeLast(6)
                                         val link = com.example.data.StripeManager.initiateStripePayment(
@@ -5036,8 +5121,8 @@ fun ProfileScreenContent(
                                     isLinkingCardProcessing = true
                                     linkingStatusMsg = "Opening secure Flutterwave gateway..."
                                     coroutineScope.launch {
-                                        val pEmail = editEmail.ifBlank { "davidotu@mixxd.org" }
-                                        val pName = editName.ifBlank { "David Otu" }
+                                        val pEmail = editEmail.ifBlank { "johndoe@example.com" }
+                                        val pName = editName.ifBlank { "John Doe" }
                                         val pPhone = editPhone.ifBlank { "+220 771 2345" }
                                         val txRef = "flw_link_" + System.currentTimeMillis().toString().takeLast(6)
                                         val link = com.example.data.FlutterwaveManager.initiatePayment(
@@ -5702,7 +5787,7 @@ fun ProfileScreenContent(
             checkoutUrl = linkingCardUrl!!,
             onPaymentSuccess = { txRef, transactionId ->
                 viewModel.linkPaymentMethod(
-                    email = editEmail.ifBlank { "davidotu@mixxd.org" },
+                    email = editEmail.ifBlank { "johndoe@example.com" },
                     cardLast4 = txRef.takeLast(4).filter { it.isDigit() }.ifBlank { "4242" }
                 )
                 linkingCardUrl = null
