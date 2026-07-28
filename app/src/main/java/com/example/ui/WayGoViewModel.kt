@@ -138,7 +138,7 @@ class WayGoViewModel(
     val currentRole: StateFlow<String> = _currentRole.asStateFlow()
 
     // Auth screen states
-    private val _isUserLoggedIn = MutableStateFlow(true) // Start authenticated for quick testing, but let them logout to see login
+    private val _isUserLoggedIn = MutableStateFlow(false) // Require sign up or login on app startup
     val isUserLoggedIn: StateFlow<Boolean> = _isUserLoggedIn.asStateFlow()
 
     // Admin Auth State (Email/Password for Enterprise Operations Portal)
@@ -376,7 +376,7 @@ class WayGoViewModel(
     ) {
         viewModelScope.launch {
             val id = "sched_" + System.currentTimeMillis().toString().takeLast(6)
-            val pName = userProfile.value?.name ?: "David Otu"
+            val pName = userProfile.value?.name ?: "John Doe"
             val newScheduled = ScheduledRideEntity(
                 id = id,
                 passengerName = pName,
@@ -574,7 +574,7 @@ class WayGoViewModel(
                         repository.saveUserProfile(
                             UserProfileEntity(
                                 id = "current_passenger",
-                                name = formattedName.ifBlank { currentProf?.name ?: "David Otu" },
+                                name = formattedName.ifBlank { currentProf?.name ?: "John Doe" },
                                 phone = currentProf?.phone ?: "+220 7712345",
                                 email = cleanEmail,
                                 gender = currentProf?.gender ?: "Male",
@@ -916,7 +916,7 @@ class WayGoViewModel(
                 repository.saveUserProfile(
                     UserProfileEntity(
                         id = "current_passenger",
-                        name = "David Otu",
+                        name = "John Doe",
                         phone = "+220 771 2345",
                         isPaymentLinked = true,
                         linkedCardLast4 = cardLast4,
@@ -956,7 +956,7 @@ class WayGoViewModel(
     ) {
         viewModelScope.launch {
             val tripId = "trip_" + System.currentTimeMillis().toString().takeLast(6)
-            val pName = userProfile.value?.name ?: "David Otu"
+            val pName = userProfile.value?.name ?: "John Doe"
 
             val newTrip = TripEntity(
                 id = tripId,

@@ -62,9 +62,9 @@ abstract class WayGoDatabase : RoomDatabase() {
             dao.insertOrUpdateProfile(
                 UserProfileEntity(
                     id = "current_passenger",
-                    name = "David Otu",
+                    name = "John Doe",
                     phone = "+220 771 2345",
-                    email = "davidotu@mixxd.org",
+                    email = "johndoe@example.com",
                     gender = "Male",
                     mobileMoneyNumber = "+220 384 5678",
                     savedHome = "Kairaba Avenue, Serrekunda",
@@ -183,7 +183,7 @@ abstract class WayGoDatabase : RoomDatabase() {
             dao.insertOrUpdateTrip(
                 TripEntity(
                     id = "trip_local_1",
-                    passengerName = "David Otu",
+                    passengerName = "John Doe",
                     driverId = "drv_alieu",
                     driverName = "Alieu Ceesay",
                     vehicleType = "CAR",
@@ -206,7 +206,7 @@ abstract class WayGoDatabase : RoomDatabase() {
             dao.insertOrUpdateTrip(
                 TripEntity(
                     id = "trip_local_2",
-                    passengerName = "David Otu",
+                    passengerName = "John Doe",
                     driverId = "drv_mariama",
                     driverName = "Mariama Jallow",
                     vehicleType = "TRICYCLE",

@@ -8,7 +8,7 @@ data class UserProfileEntity(
     @PrimaryKey val id: String = "current_passenger",
     val name: String,
     val phone: String,
-    val email: String = "davidotu@mixxd.org",
+    val email: String = "johndoe@example.com",
     val gender: String = "Not Specified",
     val mobileMoneyNumber: String = "",
     val savedHome: String = "Kairaba Avenue, Serrekunda",
