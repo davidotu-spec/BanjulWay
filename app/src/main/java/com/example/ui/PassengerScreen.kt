@@ -66,6 +66,28 @@ val GAMBIA_LOCATIONS = listOf(
     GLocation("Independence Stadium, Bakau", 13.4722, -16.6690)
 )
 
+fun resolveLocationForInput(input: String): GLocation {
+    val trimmed = input.trim()
+    if (trimmed.isEmpty()) {
+        return GAMBIA_LOCATIONS[0]
+    }
+    val match = GAMBIA_LOCATIONS.firstOrNull { loc ->
+        loc.name.equals(trimmed, ignoreCase = true) ||
+        loc.name.contains(trimmed, ignoreCase = true) ||
+        trimmed.contains(loc.name.split(",")[0], ignoreCase = true)
+    }
+    if (match != null) return match
+
+    val hash = kotlin.math.abs(trimmed.lowercase().hashCode())
+    val latOffset = ((hash % 100) - 50) * 0.0006
+    val lngOffset = (((hash / 100) % 100) - 50) * 0.0006
+    return GLocation(
+        name = trimmed,
+        lat = 13.4471 + latOffset,
+        lng = -16.6791 + lngOffset
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PassengerScreen(
@@ -395,7 +417,7 @@ fun PassengerAuthView(
     otpRequested: Boolean,
     generatedOtp: String,
     authError: String,
-    smsGatewayStatus: String = "⚡ Twilio SMS Gateway Active",
+    smsGatewayStatus: String = "⚡ WayGo SMS Gateway Active",
     isRealSmsSent: Boolean = false,
     isOtpSending: Boolean = false,
     onRequestOtp: (String) -> Unit,
@@ -624,8 +646,11 @@ fun PassengerAuthView(
                                             focusedContainerColor = BrandBlueLight,
                                             unfocusedContainerColor = BrandBlueLight,
                                             focusedTextColor = BrandBlueDark,
-                                            unfocusedTextColor = BrandBlueDark
+                                            unfocusedTextColor = BrandBlueDark,
+                                            focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                            unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                         ),
+                                        textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                     Spacer(modifier = Modifier.height(10.dp))
@@ -939,13 +964,15 @@ fun PassengerAuthView(
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .heightIn(max = 450.dp),
+                                        .height(450.dp),
                                     shape = RoundedCornerShape(20.dp),
                                     colors = CardDefaults.cardColors(containerColor = PureWhite),
                                     elevation = CardDefaults.cardElevation(10.dp)
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(16.dp)
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(16.dp)
                                     ) {
                                         Text(
                                             text = "Select Country",
@@ -1127,7 +1154,7 @@ fun PassengerAuthView(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = if (isRealSmsSent)
-                                "📱 Live SMS dispatched to ${selectedCountry.code} $phoneInput via Twilio SMS Gateway!"
+                                "📱 Live SMS dispatched to ${selectedCountry.code} $phoneInput via WayGo SMS Gateway!"
                             else
                                 "A secure verification code has been dispatched to ${selectedCountry.code} $phoneInput",
                             fontSize = 13.sp,
@@ -1179,7 +1206,7 @@ fun PassengerAuthView(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = if (isRealSmsSent) "Twilio SMS Gateway" else "WayGo SMS Gateway",
+                                            text = "WayGo SMS Gateway",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
                                             color = BrandBlueDark
@@ -1253,6 +1280,7 @@ fun PassengerAuthView(
                                 unfocusedContainerColor = BrandBlueLight
                             ),
                             textStyle = androidx.compose.ui.text.TextStyle(
+                                color = BrandBlueDark,
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 4.sp
@@ -1427,7 +1455,6 @@ fun HomeScreenContent(
 
     var showPickupDropdown by remember { mutableStateOf(false) }
     var showDropoffDropdown by remember { mutableStateOf(false) }
-    var showFareEstimatorDialog by remember { mutableStateOf(false) }
 
     var selectedSavedPlaceForOptions by remember { mutableStateOf<com.example.data.SavedPlaceEntity?>(null) }
     var showAddSavedPlaceDialog by remember { mutableStateOf(false) }
@@ -1489,6 +1516,9 @@ fun HomeScreenContent(
         TripFareEstimationService.estimateFare(pL, pG, dL, dG, "TRICYCLE").finalFareGmd
     }
     val estimatedFare = if (selectVehicleType == "CAR") carFareEstimate else tricycleFareEstimate
+    LaunchedEffect(estimatedFare) {
+        dynamicCalculatedFare = estimatedFare
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -1543,57 +1573,6 @@ fun HomeScreenContent(
                             color = BrandBlueDark
                         )
                         Spacer(modifier = Modifier.height(10.dp))
-
-                        // Interactive Fare Estimator Quick Link Banner
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(BrandBluePrimary.copy(alpha = 0.08f))
-                                .clickable { showFareEstimatorDialog = true }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(BrandBluePrimary),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Calculate,
-                                        contentDescription = "Fare Estimator Icon",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Interactive Fare Estimator",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = BrandBluePrimary
-                                    )
-                                    Text(
-                                        text = "Calculate projected route rates & tariffs",
-                                        fontSize = 10.sp,
-                                        color = BrandBlueDark.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-                            Icon(
-                                imageVector = Icons.Default.ChevronRight,
-                                contentDescription = "Open Estimator",
-                                tint = BrandBluePrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
 
                         // SAVED PLACES SECTION
                         val savedPlaces by viewModel.allSavedPlaces.collectAsState()
@@ -1800,7 +1779,16 @@ fun HomeScreenContent(
                                             onValueChange = { customLabel = it },
                                             label = { Text("Label (e.g. Home, Work, Gym)") },
                                             modifier = Modifier.fillMaxWidth().testTag("add_saved_place_label_input"),
-                                            singleLine = true
+                                            singleLine = true,
+                                            textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = BrandBlueDark,
+                                                unfocusedTextColor = BrandBlueDark,
+                                                focusedBorderColor = BrandBluePrimary,
+                                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                                focusedContainerColor = PureWhite,
+                                                unfocusedContainerColor = PureWhite
+                                            )
                                         )
 
                                         // Location Selector Dropdown
@@ -1815,7 +1803,16 @@ fun HomeScreenContent(
                                                         Icon(Icons.Default.ArrowDropDown, contentDescription = "Expand Locations")
                                                     }
                                                 },
-                                                modifier = Modifier.fillMaxWidth().clickable { isDropdownExpanded = true }.testTag("add_saved_place_location_select")
+                                                modifier = Modifier.fillMaxWidth().clickable { isDropdownExpanded = true }.testTag("add_saved_place_location_select"),
+                                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedTextColor = BrandBlueDark,
+                                                    unfocusedTextColor = BrandBlueDark,
+                                                    focusedBorderColor = BrandBluePrimary,
+                                                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                                    focusedContainerColor = PureWhite,
+                                                    unfocusedContainerColor = PureWhite
+                                                )
                                             )
                                             
                                             DropdownMenu(
@@ -1915,92 +1912,139 @@ fun HomeScreenContent(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         // Pickup Input
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
-                                value = pickupName,
-                                onValueChange = {
-                                    pickupName = it
-                                    showPickupDropdown = true
-                                },
-                                label = { Text("Pickup Location") },
-                                leadingIcon = { Icon(Icons.Default.MyLocation, contentDescription = "Loc", tint = SuccessGreen) },
-                                trailingIcon = {
-                                    IconButton(onClick = { showPickupDropdown = !showPickupDropdown }) {
-                                        Icon(
-                                            imageVector = if (showPickupDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                                            contentDescription = "Toggle Pickup Locations"
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth().testTag("pickup_input"),
-                                singleLine = true
-                            )
-                            if (showPickupDropdown) {
-                                DropdownMenu(
-                                    expanded = showPickupDropdown,
-                                    onDismissRequest = { showPickupDropdown = false },
-                                    modifier = Modifier.fillMaxWidth(0.9f)
-                                ) {
-                                    val filteredLocations = GAMBIA_LOCATIONS.filter {
-                                        pickupName.isBlank() || it.name.contains(pickupName, ignoreCase = true)
-                                    }
-                                    val locationsToShow = if (filteredLocations.isNotEmpty()) filteredLocations else GAMBIA_LOCATIONS
-                                    locationsToShow.forEach { loc ->
-                                        DropdownMenuItem(
-                                            text = { Text(loc.name) },
-                                            onClick = {
-                                                pickupName = loc.name
-                                                pCoordinates = loc
-                                                showPickupDropdown = false
-                                            }
-                                        )
+                        OutlinedTextField(
+                            value = pickupName,
+                            onValueChange = { input ->
+                                pickupName = input
+                                pCoordinates = resolveLocationForInput(input)
+                            },
+                            label = { Text("Pickup Location") },
+                            placeholder = { Text("Type pickup location or landmark...") },
+                            leadingIcon = { Icon(Icons.Default.MyLocation, contentDescription = "Loc", tint = SuccessGreen) },
+                            trailingIcon = {
+                                if (pickupName.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        pickupName = ""
+                                        pCoordinates = null
+                                    }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear pickup", tint = NeutralGray)
                                     }
                                 }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("pickup_input"),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark, fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = BrandBlueDark,
+                                unfocusedTextColor = BrandBlueDark,
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                focusedContainerColor = PureWhite,
+                                unfocusedContainerColor = PureWhite,
+                                focusedPlaceholderColor = NeutralGray.copy(alpha = 0.5f),
+                                unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.5f),
+                                focusedLabelColor = BrandBluePrimary,
+                                unfocusedLabelColor = NeutralGray
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // Dropoff Input
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
-                                value = dropoffName,
-                                onValueChange = {
-                                    dropoffName = it
-                                    showDropoffDropdown = true
-                                },
-                                label = { Text("Destination") },
-                                leadingIcon = { Icon(Icons.Default.Place, contentDescription = "Drop", tint = ErrorRed) },
-                                trailingIcon = {
-                                    IconButton(onClick = { showDropoffDropdown = !showDropoffDropdown }) {
-                                        Icon(
-                                            imageVector = if (showDropoffDropdown) Icons.Default.ArrowDropUp else Icons.Default.ArrowDropDown,
-                                            contentDescription = "Toggle Destination Locations"
-                                        )
+                        OutlinedTextField(
+                            value = dropoffName,
+                            onValueChange = { input ->
+                                dropoffName = input
+                                dCoordinates = resolveLocationForInput(input)
+                            },
+                            label = { Text("Destination (Drop-off)") },
+                            placeholder = { Text("Type destination address or landmark...") },
+                            leadingIcon = { Icon(Icons.Default.Place, contentDescription = "Drop", tint = ErrorRed) },
+                            trailingIcon = {
+                                if (dropoffName.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        dropoffName = ""
+                                        dCoordinates = null
+                                    }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear destination", tint = NeutralGray)
                                     }
-                                },
-                                modifier = Modifier.fillMaxWidth().testTag("dropoff_input"),
-                                singleLine = true
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("dropoff_input"),
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark, fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = BrandBlueDark,
+                                unfocusedTextColor = BrandBlueDark,
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                focusedContainerColor = PureWhite,
+                                unfocusedContainerColor = PureWhite,
+                                focusedPlaceholderColor = NeutralGray.copy(alpha = 0.5f),
+                                unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.5f),
+                                focusedLabelColor = BrandBluePrimary,
+                                unfocusedLabelColor = NeutralGray
                             )
-                            if (showDropoffDropdown) {
-                                DropdownMenu(
-                                    expanded = showDropoffDropdown,
-                                    onDismissRequest = { showDropoffDropdown = false },
-                                    modifier = Modifier.fillMaxWidth(0.9f)
-                                ) {
-                                    val filteredLocations = GAMBIA_LOCATIONS.filter {
-                                        dropoffName.isBlank() || it.name.contains(dropoffName, ignoreCase = true)
-                                    }
-                                    val locationsToShow = if (filteredLocations.isNotEmpty()) filteredLocations else GAMBIA_LOCATIONS
-                                    locationsToShow.forEach { loc ->
-                                        DropdownMenuItem(
-                                            text = { Text(loc.name) },
-                                            onClick = {
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Quick Location Suggestion Chips
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Quick Suggestion Chips:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandBlueDark.copy(alpha = 0.7f)
+                                )
+                                Text(
+                                    text = "Tap to auto-fill",
+                                    fontSize = 10.sp,
+                                    color = NeutralGray
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(GAMBIA_LOCATIONS) { loc ->
+                                    val shortName = loc.name.split(",")[0]
+                                    SuggestionChip(
+                                        onClick = {
+                                            if (pickupName.isBlank()) {
+                                                pickupName = loc.name
+                                                pCoordinates = loc
+                                            } else {
                                                 dropoffName = loc.name
                                                 dCoordinates = loc
-                                                showDropoffDropdown = false
                                             }
+                                        },
+                                        label = {
+                                            Text(
+                                                text = shortName,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        },
+                                        colors = SuggestionChipDefaults.suggestionChipColors(
+                                            containerColor = PureWhite,
+                                            labelColor = BrandBlueDark
+                                        ),
+                                        border = SuggestionChipDefaults.suggestionChipBorder(
+                                            enabled = true,
+                                            borderColor = BrandBluePrimary.copy(alpha = 0.25f)
                                         )
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -2108,19 +2152,6 @@ fun HomeScreenContent(
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Fare Estimation Detail Panel
-                        FareEstimationCalculator(
-                            pickupName = pickupName,
-                            dropoffName = dropoffName,
-                            pLat = pCoordinates?.lat ?: 13.4471,
-                            pLng = pCoordinates?.lng ?: -16.6791,
-                            dLat = dCoordinates?.lat ?: 13.4533,
-                            dLng = dCoordinates?.lng ?: -16.5746,
-                            vehicleType = selectVehicleType,
-                            onFareCalculated = { dynamicCalculatedFare = it }
-                        )
-
-                        Spacer(modifier = Modifier.height(20.dp))
 
                         // Submit Button
                         Button(
@@ -3066,20 +3097,6 @@ fun HomeScreenContent(
             driverName = selectedDriverForProfile!!.name,
             trips = trips,
             onDismiss = { selectedDriverForProfile = null }
-        )
-    }
-
-    if (showFareEstimatorDialog) {
-        WayGoFareEstimatorDialog(
-            onDismiss = { showFareEstimatorDialog = false },
-            onApplyRoute = { pLoc, dLoc, vType ->
-                pickupName = pLoc.name
-                pCoordinates = pLoc
-                dropoffName = dLoc.name
-                dCoordinates = dLoc
-                selectVehicleType = vType
-                showFareEstimatorDialog = false
-            }
         )
     }
 }
@@ -4907,9 +4924,14 @@ fun ProfileScreenContent(
                                 leadingIcon = { Icon(Icons.Default.Person, contentDescription = "name", tint = BrandBluePrimary) },
                                 modifier = Modifier.fillMaxWidth().testTag("profile_name_input"),
                                 singleLine = true,
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = Color.LightGray.copy(alpha = 0.6f)
+                                    unfocusedBorderColor = Color.LightGray.copy(alpha = 0.6f),
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite
                                 )
                             )
 
@@ -4921,9 +4943,14 @@ fun ProfileScreenContent(
                                 modifier = Modifier.fillMaxWidth().testTag("profile_phone_input"),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = Color.LightGray.copy(alpha = 0.6f)
+                                    unfocusedBorderColor = Color.LightGray.copy(alpha = 0.6f),
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite
                                 )
                             )
 
@@ -4935,9 +4962,14 @@ fun ProfileScreenContent(
                                 modifier = Modifier.fillMaxWidth().testTag("profile_email_input"),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = Color.LightGray.copy(alpha = 0.6f)
+                                    unfocusedBorderColor = Color.LightGray.copy(alpha = 0.6f),
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite
                                 )
                             )
 
@@ -5747,14 +5779,32 @@ fun ProfileScreenContent(
                         onValueChange = { newSavedPlaceName = it },
                         label = { Text("Place Name (e.g. SeneGambia Market)") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = BrandBlueDark,
+                            unfocusedTextColor = BrandBlueDark,
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                            focusedContainerColor = PureWhite,
+                            unfocusedContainerColor = PureWhite
+                        )
                     )
                     OutlinedTextField(
                         value = newSavedPlaceAddress,
                         onValueChange = { newSavedPlaceAddress = it },
                         label = { Text("Address / Landmark") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = BrandBlueDark,
+                            unfocusedTextColor = BrandBlueDark,
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                            focusedContainerColor = PureWhite,
+                            unfocusedContainerColor = PureWhite
+                        )
                     )
                 }
             },
@@ -6062,7 +6112,18 @@ fun SupportInboxContent(viewModel: WayGoViewModel) {
                 onValueChange = { messageInput = it },
                 placeholder = { Text("Ask support a question...") },
                 modifier = Modifier.weight(1f),
-                singleLine = true
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = BrandBlueDark,
+                    unfocusedTextColor = BrandBlueDark,
+                    focusedBorderColor = BrandBluePrimary,
+                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                    focusedContainerColor = PureWhite,
+                    unfocusedContainerColor = PureWhite,
+                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
+                )
             )
             Spacer(modifier = Modifier.width(6.dp))
             IconButton(

@@ -185,9 +185,7 @@ class WayGoViewModel(
     private val _verificationId = MutableStateFlow("")
     val verificationId: StateFlow<String> = _verificationId.asStateFlow()
 
-    private val _smsGatewayStatus = MutableStateFlow(
-        if (SmsOtpGatewayManager.isTwilioConfigured()) "⚡ Twilio SMS Gateway Active" else "🧪 Local SMS Gateway Active (Simulated)"
-    )
+    private val _smsGatewayStatus = MutableStateFlow("⚡ WayGo SMS Gateway Active")
     val smsGatewayStatus: StateFlow<String> = _smsGatewayStatus.asStateFlow()
 
     private val _isRealSmsSent = MutableStateFlow(false)

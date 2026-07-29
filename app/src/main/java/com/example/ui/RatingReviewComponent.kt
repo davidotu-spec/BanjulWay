@@ -60,8 +60,6 @@ fun RatingReviewComponent(
         }
     }
 
-    val scrollState = rememberScrollState()
-
     // Context-dependent tags
     val ratingDescription = when (ratingStars) {
         1 -> "Terrible"
@@ -102,8 +100,7 @@ fun RatingReviewComponent(
     ) {
         Column(
             modifier = Modifier
-                .padding(20.dp)
-                .verticalScroll(scrollState),
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Drag handle / Notch indicator
@@ -305,9 +302,16 @@ fun RatingReviewComponent(
                     .fillMaxWidth()
                     .testTag("input_review_comment"),
                 shape = RoundedCornerShape(12.dp),
+                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                 colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = BrandBlueDark,
+                    unfocusedTextColor = BrandBlueDark,
                     focusedBorderColor = BrandBluePrimary,
-                    unfocusedBorderColor = Color.LightGray
+                    unfocusedBorderColor = Color.LightGray,
+                    focusedContainerColor = PureWhite,
+                    unfocusedContainerColor = PureWhite,
+                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                 ),
                 maxLines = 3,
                 minLines = 2,
@@ -435,9 +439,16 @@ fun RatingReviewComponent(
                                     .testTag("input_custom_tip"),
                                 singleLine = true,
                                 shape = RoundedCornerShape(8.dp),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = SuccessGreen,
-                                    unfocusedBorderColor = Color.LightGray
+                                    unfocusedBorderColor = Color.LightGray,
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite,
+                                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                 )
                             )
                         }
