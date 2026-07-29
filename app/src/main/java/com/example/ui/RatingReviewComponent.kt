@@ -5,13 +5,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.StarBorder
@@ -60,8 +55,6 @@ fun RatingReviewComponent(
         }
     }
 
-    val scrollState = rememberScrollState()
-
     // Context-dependent tags
     val ratingDescription = when (ratingStars) {
         1 -> "Terrible"
@@ -102,8 +95,7 @@ fun RatingReviewComponent(
     ) {
         Column(
             modifier = Modifier
-                .padding(20.dp)
-                .verticalScroll(scrollState),
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Drag handle / Notch indicator
@@ -135,7 +127,7 @@ fun RatingReviewComponent(
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
             )
 
-            Divider(color = BrandBluePrimary.copy(alpha = 0.08f))
+            HorizontalDivider(color = BrandBluePrimary.copy(alpha = 0.08f))
 
             Spacer(modifier = Modifier.height(14.dp))
 

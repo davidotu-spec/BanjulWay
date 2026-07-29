@@ -11,11 +11,11 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.waygo.kxmpzq"
+    applicationId = "com.aistudio.wayGo.kxmpzq"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "3.0"
+    versionCode = 8
+    versionName = "7"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -28,12 +28,6 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
   }
 
   buildTypes {
@@ -44,7 +38,7 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
-      signingConfig = signingConfigs.getByName("debugConfig")
+      signingConfig = signingConfigs.getByName("debug")
     }
   }
   compileOptions {
@@ -58,7 +52,7 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
   sourceSets {
     getByName("main") {
-      java.srcDirs("build/generated/ksp/debug/kotlin")
+      java.srcDir("build/generated/ksp/debug/kotlin")
     }
   }
 }
@@ -75,7 +69,7 @@ secrets {
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
-  implementation("com.google.firebase:firebase-firestore-ktx:25.1.1")
+  implementation(libs.firebase.firestore)
   implementation(libs.firebase.auth)
   // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
