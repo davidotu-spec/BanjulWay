@@ -84,6 +84,7 @@ fun DailyPerformanceSummaryModal(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
+                .heightIn(max = 600.dp)
                 .padding(vertical = 16.dp)
                 .clip(RoundedCornerShape(28.dp))
                 .border(1.dp, borderCol, RoundedCornerShape(28.dp))

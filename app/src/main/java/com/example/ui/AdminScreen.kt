@@ -619,7 +619,18 @@ fun AdminSupportTab(
                 onValueChange = { replyInput = it },
                 placeholder = { Text("Type support answer ticket...") },
                 modifier = Modifier.weight(1f),
-                singleLine = true
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = BrandBlueDark,
+                    unfocusedTextColor = BrandBlueDark,
+                    focusedBorderColor = BrandBluePrimary,
+                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                    focusedContainerColor = PureWhite,
+                    unfocusedContainerColor = PureWhite,
+                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
+                )
             )
             Spacer(modifier = Modifier.width(6.dp))
             IconButton(
@@ -1145,9 +1156,16 @@ fun AdminEmailLoginView(
                                     .fillMaxWidth()
                                     .testTag("admin_register_name_input"),
                                 shape = RoundedCornerShape(14.dp),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f)
+                                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite,
+                                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                 )
                             )
                             Spacer(modifier = Modifier.height(10.dp))
@@ -1168,9 +1186,16 @@ fun AdminEmailLoginView(
                                 .fillMaxWidth()
                                 .testTag("admin_email_input"),
                             shape = RoundedCornerShape(14.dp),
+                            textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                             colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = BrandBlueDark,
+                                unfocusedTextColor = BrandBlueDark,
                                 focusedBorderColor = BrandBluePrimary,
-                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f)
+                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                focusedContainerColor = PureWhite,
+                                unfocusedContainerColor = PureWhite,
+                                focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                             )
                         )
 
@@ -1201,9 +1226,16 @@ fun AdminEmailLoginView(
                                 .fillMaxWidth()
                                 .testTag("admin_password_input"),
                             shape = RoundedCornerShape(14.dp),
+                            textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                             colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = BrandBlueDark,
+                                unfocusedTextColor = BrandBlueDark,
                                 focusedBorderColor = BrandBluePrimary,
-                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f)
+                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                focusedContainerColor = PureWhite,
+                                unfocusedContainerColor = PureWhite,
+                                focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                             )
                         )
 
@@ -1222,9 +1254,16 @@ fun AdminEmailLoginView(
                                     .fillMaxWidth()
                                     .testTag("admin_invite_code_input"),
                                 shape = RoundedCornerShape(14.dp),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f)
+                                    unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite,
+                                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                 )
                             )
                         }

@@ -322,7 +322,16 @@ fun SosEmergencyDialog(
                                     onValueChange = { editContactName = it },
                                     label = { Text("Contact Name") },
                                     singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = BrandBlueDark,
+                                        unfocusedTextColor = BrandBlueDark,
+                                        focusedBorderColor = BrandBluePrimary,
+                                        unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                        focusedContainerColor = PureWhite,
+                                        unfocusedContainerColor = PureWhite
+                                    )
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 OutlinedTextField(
@@ -331,7 +340,16 @@ fun SosEmergencyDialog(
                                     label = { Text("Phone Number") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                                     singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = BrandBlueDark,
+                                        unfocusedTextColor = BrandBlueDark,
+                                        focusedBorderColor = BrandBluePrimary,
+                                        unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                        focusedContainerColor = PureWhite,
+                                        unfocusedContainerColor = PureWhite
+                                    )
                                 )
                             } else {
                                 Text(

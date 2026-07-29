@@ -2475,8 +2475,18 @@ fun DriverScreen(
                                         label = { Text("Mobile Money Phone Number", fontSize = 11.sp) },
                                         placeholder = { Text("+220 XXXXXXX") },
                                         modifier = Modifier.fillMaxWidth().testTag("payout_phone_input"),
-                                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
-                                        singleLine = true
+                                        textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark, fontSize = 13.sp),
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = BrandBlueDark,
+                                            unfocusedTextColor = BrandBlueDark,
+                                            focusedBorderColor = BrandBluePrimary,
+                                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                            focusedContainerColor = PureWhite,
+                                            unfocusedContainerColor = PureWhite,
+                                            focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                            unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
+                                        )
                                     )
                                     
                                     // Quick Summary Callout inside dialog
@@ -2706,7 +2716,16 @@ fun DriverScreen(
                                     value = mobileMoneyNum,
                                     onValueChange = { mobileMoneyNum = it },
                                     label = { Text("Transfer Phone Line") },
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = BrandBlueDark,
+                                        unfocusedTextColor = BrandBlueDark,
+                                        focusedBorderColor = BrandBluePrimary,
+                                        unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
+                                        focusedContainerColor = PureWhite,
+                                        unfocusedContainerColor = PureWhite
+                                    )
                                 )
                             } else {
                                 Text("Success! Wallet balance moved successfully to Wave. Standard network commissions computed.", color = SuccessGreen, fontWeight = FontWeight.Bold)

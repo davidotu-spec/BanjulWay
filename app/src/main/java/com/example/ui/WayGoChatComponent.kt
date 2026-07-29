@@ -282,9 +282,16 @@ fun WayGoChatDialog(
                         placeholder = { Text("Write a secure message...", fontSize = 11.sp) },
                         maxLines = 2,
                         shape = RoundedCornerShape(12.dp),
+                        textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                         colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = BrandBlueDark,
+                            unfocusedTextColor = BrandBlueDark,
                             focusedBorderColor = BrandBluePrimary,
-                            unfocusedBorderColor = Color.LightGray.copy(alpha = 0.6f)
+                            unfocusedBorderColor = Color.LightGray.copy(alpha = 0.6f),
+                            focusedContainerColor = PureWhite,
+                            unfocusedContainerColor = PureWhite,
+                            focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                            unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                         ),
                         trailingIcon = {
                             if (rawText.isNotEmpty()) {

@@ -181,10 +181,17 @@ fun VehicleMileageMaintenanceWidget(
                                         .width(130.dp)
                                         .height(48.dp)
                                         .testTag("odometer_input_field"),
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark, fontSize = 12.sp),
                                     colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = BrandBlueDark,
+                                        unfocusedTextColor = BrandBlueDark,
                                         focusedBorderColor = BrandBlueSecondary,
                                         focusedLabelColor = BrandBlueSecondary,
-                                        unfocusedBorderColor = borderCol
+                                        unfocusedBorderColor = borderCol,
+                                        focusedContainerColor = PureWhite,
+                                        unfocusedContainerColor = PureWhite,
+                                        focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                        unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                     )
                                 )
 

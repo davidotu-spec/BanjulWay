@@ -233,9 +233,16 @@ fun DriverOnboardingForm(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("onboard_input_name"),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = GrayBorderColor
+                                    unfocusedBorderColor = GrayBorderColor,
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite,
+                                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                 ),
                                 shape = RoundedCornerShape(10.dp),
                                 leadingIcon = {
@@ -268,9 +275,16 @@ fun DriverOnboardingForm(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("onboard_input_phone"),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = GrayBorderColor
+                                    unfocusedBorderColor = GrayBorderColor,
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite,
+                                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                 ),
                                 shape = RoundedCornerShape(10.dp),
                                 leadingIcon = {
@@ -386,9 +400,16 @@ fun DriverOnboardingForm(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("onboard_input_plate"),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = GrayBorderColor
+                                    unfocusedBorderColor = GrayBorderColor,
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite,
+                                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                 ),
                                 shape = RoundedCornerShape(10.dp),
                                 leadingIcon = {
@@ -421,9 +442,16 @@ fun DriverOnboardingForm(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("onboard_input_license"),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = GrayBorderColor
+                                    unfocusedBorderColor = GrayBorderColor,
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite,
+                                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                 ),
                                 shape = RoundedCornerShape(10.dp),
                                 leadingIcon = {
@@ -453,9 +481,16 @@ fun DriverOnboardingForm(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("onboard_input_verification"),
+                                textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                 colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = BrandBlueDark,
+                                    unfocusedTextColor = BrandBlueDark,
                                     focusedBorderColor = BrandBluePrimary,
-                                    unfocusedBorderColor = GrayBorderColor
+                                    unfocusedBorderColor = GrayBorderColor,
+                                    focusedContainerColor = PureWhite,
+                                    unfocusedContainerColor = PureWhite,
+                                    focusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f),
+                                    unfocusedPlaceholderColor = NeutralGray.copy(alpha = 0.6f)
                                 ),
                                 shape = RoundedCornerShape(10.dp),
                                 leadingIcon = {
