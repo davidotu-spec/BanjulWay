@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.data.DriverEntity
 import com.example.data.TripEntity
 import com.example.ui.theme.*
@@ -1176,6 +1178,133 @@ fun DriverScreen(
                                 }
                             }
 
+                            // EARNINGS GOAL TRACKER CARD
+                            val driverGoal by viewModel.driverDailyGoalGmd.collectAsState()
+                            val currentNetToday = netEarningsForTimeframe
+                            val goalProgressFraction = (currentNetToday.toFloat() / driverGoal.toFloat()).coerceIn(0f, 1f)
+                            val goalPercent = (goalProgressFraction * 100).toInt()
+                            var showEditGoalDialog by remember { mutableStateOf(false) }
+
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("driver_earnings_goal_card"),
+                                colors = CardDefaults.cardColors(containerColor = BrandBluePrimary.copy(alpha = 0.05f)),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.2f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Icon(Icons.Default.EmojiEvents, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(20.dp))
+                                            Text("Daily Earnings Goal Tracker", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                        }
+                                        TextButton(
+                                            onClick = { showEditGoalDialog = true },
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Text("Set Goal", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.Bottom
+                                    ) {
+                                        Text("$currentNetToday GMD earned", fontWeight = FontWeight.Black, fontSize = 15.sp, color = SuccessGreen)
+                                        Text("Goal: $driverGoal GMD ($goalPercent%)", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = NeutralGray)
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    LinearProgressIndicator(
+                                        progress = { goalProgressFraction },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(8.dp)
+                                            .clip(RoundedCornerShape(4.dp)),
+                                        color = if (goalProgressFraction >= 1f) SuccessGreen else BrandBluePrimary,
+                                        trackColor = Color.LightGray.copy(alpha = 0.4f)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Milestone Badges Row
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        val badge500 = currentNetToday >= 500
+                                        val badge1000 = currentNetToday >= 1000
+                                        val badge1500 = currentNetToday >= driverGoal
+
+                                        AssistChip(
+                                            onClick = {},
+                                            label = { Text("500 GMD 🥉", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                                            colors = AssistChipDefaults.assistChipColors(
+                                                containerColor = if (badge500) Color(0xFFCD7F32).copy(alpha = 0.2f) else Color.LightGray.copy(alpha = 0.2f),
+                                                labelColor = if (badge500) BrandBlueDark else NeutralGray
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (badge500) Color(0xFFCD7F32) else Color.Transparent)
+                                        )
+                                        AssistChip(
+                                            onClick = {},
+                                            label = { Text("1,000 GMD 🥈", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                                            colors = AssistChipDefaults.assistChipColors(
+                                                containerColor = if (badge1000) Color(0xFFC0C0C0).copy(alpha = 0.25f) else Color.LightGray.copy(alpha = 0.2f),
+                                                labelColor = if (badge1000) BrandBlueDark else NeutralGray
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (badge1000) Color(0xFFC0C0C0) else Color.Transparent)
+                                        )
+                                        AssistChip(
+                                            onClick = {},
+                                            label = { Text("Goal Met 🏆", fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                                            colors = AssistChipDefaults.assistChipColors(
+                                                containerColor = if (badge1500) AccentAmber.copy(alpha = 0.25f) else Color.LightGray.copy(alpha = 0.2f),
+                                                labelColor = if (badge1500) BrandBlueDark else NeutralGray
+                                            ),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, if (badge1500) AccentAmber else Color.Transparent)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (showEditGoalDialog) {
+                                var customGoalInput by remember { mutableStateOf(driverGoal.toString()) }
+                                AlertDialog(
+                                    onDismissRequest = { showEditGoalDialog = false },
+                                    title = { Text("Customize Daily Target", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
+                                    text = {
+                                        OutlinedTextField(
+                                            value = customGoalInput,
+                                            onValueChange = { customGoalInput = it.filter { char -> char.isDigit() } },
+                                            label = { Text("Target Amount (GMD)") },
+                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                            singleLine = true
+                                        )
+                                    },
+                                    confirmButton = {
+                                        Button(onClick = {
+                                            val valInt = customGoalInput.toIntOrNull() ?: 1500
+                                            viewModel.setDriverDailyGoal(valInt)
+                                            showEditGoalDialog = false
+                                        }) {
+                                            Text("Save Goal")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showEditGoalDialog = false }) { Text("Cancel") }
+                                    }
+                                )
+                            }
+
                             Spacer(modifier = Modifier.height(16.dp))
 
                             // Detailed Weekly Earnings Breakdown (Gross, 15% Commission, and Net Payout)
@@ -1942,6 +2071,23 @@ fun DriverScreen(
                                     Column {
                                         Text("Current Passenger: ${activeExecution.passengerName}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                         Text("Heading To: ${activeExecution.dropoffName.split(",")[0]}", fontSize = 12.sp, color = NeutralGray)
+                                        if (activeExecution.preferences.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = BrandBluePrimary.copy(alpha = 0.1f),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.25f))
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(Icons.Default.Tune, contentDescription = null, tint = BrandBluePrimary, modifier = Modifier.size(12.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("Prefs: ${activeExecution.preferences}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BrandBlueDark)
+                                                }
+                                            }
+                                        }
                                     }
 
                                     Card(colors = CardDefaults.cardColors(containerColor = BrandBlueLight)) {
@@ -2040,12 +2186,48 @@ fun DriverScreen(
                                         }
                                     }
                                     "ARRIVED" -> {
-                                        Button(
-                                            onClick = { viewModel.beginTransit(activeExecution.id, currentDriver.id) }, // shifts into active EN ROUTE
-                                            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("begin_transit_btn"),
-                                            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                                        var enteredPin by remember { mutableStateOf("") }
+                                        val pinError by viewModel.pinVerificationError.collectAsState()
+
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(BrandBlueLight.copy(alpha = 0.5f))
+                                                .padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Text("Begin Transit & Pick Up Passenger")
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Pin, contentDescription = null, tint = BrandBluePrimary)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Enter Passenger Safety PIN", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                            }
+                                            
+                                            OutlinedTextField(
+                                                value = enteredPin,
+                                                onValueChange = { if (it.length <= 4) enteredPin = it },
+                                                placeholder = { Text("Ask passenger for 4-digit code (e.g. ${activeExecution.verificationPin})") },
+                                                modifier = Modifier.fillMaxWidth().testTag("driver_pin_input"),
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                singleLine = true
+                                            )
+
+                                            if (pinError.isNotEmpty()) {
+                                                Text(pinError, fontSize = 11.sp, color = ErrorRed, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            Button(
+                                                onClick = {
+                                                    viewModel.beginTransitWithPin(activeExecution.id, currentDriver.id, enteredPin)
+                                                },
+                                                modifier = Modifier.fillMaxWidth().height(44.dp).testTag("begin_transit_btn"),
+                                                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                                enabled = enteredPin.length == 4
+                                            ) {
+                                                Icon(Icons.Default.VerifiedUser, contentDescription = null)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Verify PIN & Begin Transit", fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
                                     "EN_ROUTE" -> {

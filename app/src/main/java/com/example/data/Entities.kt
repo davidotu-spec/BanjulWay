@@ -58,7 +58,9 @@ data class TripEntity(
     val reviewTags: String = "", // comma-separated tags e.g. "Safe, Polite"
     val tipGmd: Int = 0,
     val timestamp: Long = System.currentTimeMillis(),
-    val commissionGmd: Int = 0
+    val commissionGmd: Int = 0,
+    val verificationPin: String = "4829",
+    val preferences: String = ""
 )
 
 @Entity(tableName = "support_messages")

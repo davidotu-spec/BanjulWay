@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
         SavedPlaceEntity::class,
         VehicleMileageEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class WayGoDatabase : RoomDatabase() {

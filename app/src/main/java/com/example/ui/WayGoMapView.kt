@@ -57,11 +57,52 @@ data class MapLandmark(
 val GAMBIAN_LANDMARKS = listOf(
     MapLandmark("Albert Market", 13.4533, -16.5746, "Market hub in Banjul"),
     MapLandmark("Arch 22", 13.4580, -16.5820, "Historic Banjul gateway gate"),
+    MapLandmark("Banjul Ferry Terminal", 13.4505, -16.5710, "Ferry port to Barra"),
     MapLandmark("University of Gambia", 13.4452, -16.6713, "Education center"),
     MapLandmark("Kairaba Business Hub", 13.4471, -16.6791, "Serrekunda shopping street"),
+    MapLandmark("Westfield Junction", 13.4385, -16.6760, "Transit hub"),
+    MapLandmark("Tippa Garage", 13.4340, -16.6850, "Taxi rank"),
     MapLandmark("Senegambia Beach", 13.4420, -16.7110, "Tourist & beach hotels"),
-    MapLandmark("Independence Stadium", 13.4722, -16.6690, "Bakau national stadium")
+    MapLandmark("Independence Stadium", 13.4722, -16.6690, "Bakau national stadium"),
+    MapLandmark("Brusubi Turntable", 13.4020, -16.7180, "Roundabout"),
+    MapLandmark("Kotu Beach", 13.4610, -16.7020, "Coastal beach hub")
 )
+
+data class MapPinSelection(
+    val name: String,
+    val lat: Double,
+    val lng: Double
+)
+
+private fun reverseGeocodeGambia(lat: Double, lng: Double): String {
+    val closest = GAMBIAN_LANDMARKS.minByOrNull { calculateDistance(lat, lng, it.lat, it.lng) }
+    if (closest != null) {
+        val dist = calculateDistance(lat, lng, closest.lat, closest.lng)
+        if (dist < 0.5) return closest.name
+        if (dist < 1.5) return "Near ${closest.name}"
+    }
+    return when {
+        lng > -16.61 -> "Banjul City Center"
+        lat > 13.465 -> "Bakau District, Kanifing"
+        lng < -16.70 -> "Senegambia / Coastal Area"
+        lat > 13.44 -> "Kanifing / Pipeline Area"
+        else -> "Serrekunda Central Area"
+    }
+}
+
+private fun getLngFromX(x: Float, width: Float, zoom: Float): Double {
+    val centerX = width / 2f
+    val rawX = (x - centerX) / zoom + centerX
+    val ratio = (rawX / width).toDouble()
+    return (MIN_LNG + ratio * (MAX_LNG - MIN_LNG)).coerceIn(MIN_LNG, MAX_LNG)
+}
+
+private fun getLatFromY(y: Float, height: Float, zoom: Float): Double {
+    val centerY = height / 2f
+    val rawY = (y - centerY) / zoom + centerY
+    val ratio = (rawY / height).toDouble()
+    return (MAX_LAT - ratio * (MAX_LAT - MIN_LAT)).coerceIn(MIN_LAT, MAX_LAT)
+}
 
 private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val r = 6371.0 // Earth's radius in km
@@ -84,6 +125,16 @@ fun WayGoMapView(
     simulatedDriverLng: Double? = null,
     passengerLat: Double = 13.4471,
     passengerLng: Double = -16.6791,
+    pickupLocationName: String? = null,
+    pickupLat: Double? = null,
+    pickupLng: Double? = null,
+    dropoffLocationName: String? = null,
+    dropoffLat: Double? = null,
+    dropoffLng: Double? = null,
+    mapPickingMode: String? = null,
+    onSetPickupLocation: ((name: String, lat: Double, lng: Double) -> Unit)? = null,
+    onSetDropoffLocation: ((name: String, lat: Double, lng: Double) -> Unit)? = null,
+    onCancelMapPicking: (() -> Unit)? = null,
     progress: Float = 0f,
     onSelectDriver: ((DriverEntity) -> Unit)? = null
 ) {
@@ -93,9 +144,13 @@ fun WayGoMapView(
     // Interactive Map Control States
     var mapType by remember { mutableStateOf("ROADMAP") } // "ROADMAP", "SATELLITE", "TERRAIN"
     var showTraffic by remember { mutableStateOf(false) }
+    var showHeatmap by remember { mutableStateOf(true) }
     var vehicleFilter by remember { mutableStateOf("ALL") } // "ALL", "CAR", "TRICYCLE"
     var zoomLevel by remember { mutableFloatStateOf(1.0f) }
     var selectedDriverOnMap by remember { mutableStateOf<DriverEntity?>(null) }
+    var tappedPinLocation by remember { mutableStateOf<MapPinSelection?>(null) }
+    var canvasWidth by remember { mutableFloatStateOf(1000f) }
+    var canvasHeight by remember { mutableFloatStateOf(800f) }
     var showMapTypeMenu by remember { mutableStateOf(false) }
 
     val isActiveRide = activeTrip != null && activeTrip.status in listOf("ACCEPTED", "ARRIVED", "EN_ROUTE")
@@ -177,21 +232,32 @@ fun WayGoMapView(
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(availableDrivers, zoomLevel, mapType) {
+                .pointerInput(availableDrivers, zoomLevel, mapType, mapPickingMode) {
                     detectTapGestures { tapOffset ->
                         val touchRadiusPx = with(density) { 32.dp.toPx() }
-                        val tapped = driverPositions.firstOrNull { (_, pos) ->
+                        val tappedDriver = driverPositions.firstOrNull { (_, pos) ->
                             val dx = tapOffset.x - pos.x
                             val dy = tapOffset.y - pos.y
                             (dx * dx + dy * dy) <= (touchRadiusPx * touchRadiusPx)
                         }?.first
 
-                        selectedDriverOnMap = tapped
+                        if (tappedDriver != null && mapPickingMode == null) {
+                            selectedDriverOnMap = tappedDriver
+                            tappedPinLocation = null
+                        } else {
+                            selectedDriverOnMap = null
+                            val tappedLng = getLngFromX(tapOffset.x, canvasWidth, zoomLevel)
+                            val tappedLat = getLatFromY(tapOffset.y, canvasHeight, zoomLevel)
+                            val locName = reverseGeocodeGambia(tappedLat, tappedLng)
+                            tappedPinLocation = MapPinSelection(locName, tappedLat, tappedLng)
+                        }
                     }
                 }
         ) {
             val width = size.width
             val height = size.height
+            canvasWidth = width
+            canvasHeight = height
 
             // Clear previous positions
             driverPositions.clear()
@@ -295,6 +361,57 @@ fun WayGoMapView(
                 drawLine(Color(0xFFF44336), hMid, hEnd, strokeWidth = 5f * zoomLevel)
             }
 
+            // 6b. Driver Demand Heatmap & Surge Multipliers Layer
+            if (showHeatmap) {
+                val surgeZones = listOf(
+                    Triple("Westfield", GLocation("Westfield Junction", 13.4385, -16.6760), "1.8x"),
+                    Triple("Senegambia", GLocation("Senegambia Beach", 13.4420, -16.7110), "1.5x"),
+                    Triple("Market", GLocation("Albert Market Banjul", 13.4533, -16.5746), "1.4x"),
+                    Triple("Turntable", GLocation("Brusubi Turntable", 13.4020, -16.7180), "1.3x")
+                )
+
+                surgeZones.forEach { (shortName, loc, multiplier) ->
+                    val zX = getX(loc.lng)
+                    val zY = getY(loc.lat)
+                    if (zX in 0f..width && zY in 0f..height) {
+                        val colorBase = when (multiplier) {
+                            "1.8x" -> Color(0xFFE53935)
+                            "1.5x" -> Color(0xFFFF9800)
+                            "1.4x" -> Color(0xFFFFA000)
+                            else -> Color(0xFF388E3C)
+                        }
+
+                        val glowRadius = 42.dp.toPx() * pulseScale
+                        drawCircle(color = colorBase.copy(alpha = 0.18f), radius = glowRadius, center = Offset(zX, zY))
+                        drawCircle(color = colorBase.copy(alpha = 0.35f), radius = 24.dp.toPx(), center = Offset(zX, zY))
+                        drawCircle(color = colorBase, radius = 9.dp.toPx(), center = Offset(zX, zY))
+
+                        val labelText = "🔥 $shortName $multiplier"
+                        val labelStyle = TextStyle(
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                        val measured = textMeasurer.measure(labelText, labelStyle)
+                        val pW = measured.size.width + 12.dp.toPx()
+                        val pH = measured.size.height + 6.dp.toPx()
+                        val pL = zX - pW / 2f
+                        val pT = zY - 14.dp.toPx() - pH
+
+                        drawRoundRect(
+                            color = colorBase,
+                            topLeft = Offset(pL, pT),
+                            size = androidx.compose.ui.geometry.Size(pW, pH),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f, 10f)
+                        )
+                        drawText(
+                            textLayoutResult = measured,
+                            topLeft = Offset(pL + 6.dp.toPx(), pT + 3.dp.toPx())
+                        )
+                    }
+                }
+            }
+
             // 7. Draw Landmarks
             GAMBIAN_LANDMARKS.forEach { landmark ->
                 val lx = getX(landmark.lng)
@@ -317,12 +434,17 @@ fun WayGoMapView(
                 }
             }
 
-            // 8. Active Trip Routing Line (if ride in progress)
-            activeTrip?.let { trip ->
-                val pX = getX(trip.pickupLng)
-                val pY = getY(trip.pickupLat)
-                val dX = getX(trip.dropoffLng)
-                val dY = getY(trip.dropoffLat)
+            // 8. Active Trip Routing Line & Live Traffic Polyline (if route active or picked)
+            val routePLat = activeTrip?.pickupLat ?: pickupLat
+            val routePLng = activeTrip?.pickupLng ?: pickupLng
+            val routeDLat = activeTrip?.dropoffLat ?: dropoffLat
+            val routeDLng = activeTrip?.dropoffLng ?: dropoffLng
+
+            if (routePLat != null && routePLng != null && routeDLat != null && routeDLng != null) {
+                val pX = getX(routePLng)
+                val pY = getY(routePLat)
+                val dX = getX(routeDLng)
+                val dY = getY(routeDLat)
 
                 // Pickup Pin
                 drawCircle(color = SuccessGreen.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = Offset(pX, pY))
@@ -332,13 +454,68 @@ fun WayGoMapView(
                 drawCircle(color = ErrorRed.copy(alpha = 0.25f), radius = 14.dp.toPx(), center = Offset(dX, dY))
                 drawCircle(color = ErrorRed, radius = 6.dp.toPx(), center = Offset(dX, dY))
 
-                // Polyline Route
+                // 3 Color-Coded Traffic Density Segments
+                val m1X = pX + (dX - pX) * 0.45f
+                val m1Y = pY + (dY - pY) * 0.45f
+                val m2X = pX + (dX - pX) * 0.75f
+                val m2Y = pY + (dY - pY) * 0.75f
+
+                // Green Segment (Smooth Flow)
                 drawLine(
-                    color = BrandBluePrimary,
+                    color = Color(0xFF2E7D32),
                     start = Offset(pX, pY),
+                    end = Offset(m1X, m1Y),
+                    strokeWidth = 5.dp.toPx()
+                )
+                // Amber Segment (Moderate Traffic)
+                drawLine(
+                    color = Color(0xFFF57C00),
+                    start = Offset(m1X, m1Y),
+                    end = Offset(m2X, m2Y),
+                    strokeWidth = 5.dp.toPx()
+                )
+                // Red Segment (Westfield / Junction Congestion)
+                drawLine(
+                    color = Color(0xFFD32F2F),
+                    start = Offset(m2X, m2Y),
                     end = Offset(dX, dY),
-                    strokeWidth = 4.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 14f), 0f)
+                    strokeWidth = 6.dp.toPx()
+                )
+
+                // Smooth Car Marker Position on Route
+                val routeProgress = if (progress > 0f) progress else 0.4f
+                val cX = pX + (dX - pX) * routeProgress
+                val cY = pY + (dY - pY) * routeProgress
+
+                drawCircle(color = BrandBluePrimary.copy(alpha = 0.35f), radius = 16.dp.toPx() * pulseScale, center = Offset(cX, cY))
+                drawCircle(color = Color.White, radius = 9.dp.toPx(), center = Offset(cX, cY))
+                drawCircle(color = BrandBluePrimary, radius = 6.dp.toPx(), center = Offset(cX, cY))
+
+                // Overhead Live Route Traffic Summary Badge
+                val tagText = "🟢 Smooth • 🚦 Westfield Slowdown • ⏱️ 12m"
+                val tagStyle = TextStyle(fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = BrandBlueDark)
+                val tagMeasured = textMeasurer.measure(tagText, tagStyle)
+                val tW = tagMeasured.size.width + 16.dp.toPx()
+                val tH = tagMeasured.size.height + 8.dp.toPx()
+                val tL = m1X - tW / 2f
+                val tT = m1Y - 14.dp.toPx() - tH
+
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.95f),
+                    topLeft = Offset(tL, tT),
+                    size = androidx.compose.ui.geometry.Size(tW, tH),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(12f, 12f)
+                )
+                drawRoundRect(
+                    color = BrandBluePrimary.copy(alpha = 0.4f),
+                    topLeft = Offset(tL, tT),
+                    size = androidx.compose.ui.geometry.Size(tW, tH),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(12f, 12f),
+                    style = Stroke(width = 2f)
+                )
+                drawText(
+                    textLayoutResult = tagMeasured,
+                    topLeft = Offset(tL + 8.dp.toPx(), tT + 4.dp.toPx())
                 )
             }
 
@@ -421,8 +598,34 @@ fun WayGoMapView(
                 }
             }
 
-            // 10. Draw Passenger Location (Blue Dot with Pulsing Halo)
-            if (!isActiveRide) {
+            // 10. Draw Custom Pickup Pin (Green)
+            if (pickupLat != null && pickupLng != null && !isActiveRide) {
+                val pX = getX(pickupLng)
+                val pY = getY(pickupLat)
+                drawCircle(color = SuccessGreen.copy(alpha = 0.25f), radius = 18.dp.toPx(), center = Offset(pX, pY))
+                drawCircle(color = Color.White, radius = 9.dp.toPx(), center = Offset(pX, pY))
+                drawCircle(color = SuccessGreen, radius = 6.dp.toPx(), center = Offset(pX, pY))
+
+                val labelText = "Pickup: ${pickupLocationName?.split(",")?.get(0)?.take(16) ?: "Selected"}"
+                val labelStyle = TextStyle(fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = BrandBlueDark)
+                val measured = textMeasurer.measure(labelText, labelStyle)
+                val pillWidth = measured.size.width + 12.dp.toPx()
+                val pillHeight = measured.size.height + 6.dp.toPx()
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.95f),
+                    topLeft = Offset(pX - pillWidth / 2f, pY - 18.dp.toPx() - pillHeight),
+                    size = androidx.compose.ui.geometry.Size(pillWidth, pillHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f, 10f)
+                )
+                drawRoundRect(
+                    color = SuccessGreen,
+                    topLeft = Offset(pX - pillWidth / 2f, pY - 18.dp.toPx() - pillHeight),
+                    size = androidx.compose.ui.geometry.Size(pillWidth, pillHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f, 10f),
+                    style = Stroke(width = 2f)
+                )
+                drawText(measured, topLeft = Offset(pX - pillWidth / 2f + 6.dp.toPx(), pY - 18.dp.toPx() - pillHeight + 3.dp.toPx()))
+            } else if (!isActiveRide) {
                 val pX = getX(passengerLng)
                 val pY = getY(passengerLat)
 
@@ -441,6 +644,79 @@ fun WayGoMapView(
                     radius = 6.dp.toPx(),
                     center = Offset(pX, pY)
                 )
+            }
+
+            // 11. Draw Custom Dropoff Pin (Red)
+            if (dropoffLat != null && dropoffLng != null && !isActiveRide) {
+                val dX = getX(dropoffLng)
+                val dY = getY(dropoffLat)
+                drawCircle(color = ErrorRed.copy(alpha = 0.25f), radius = 18.dp.toPx(), center = Offset(dX, dY))
+                drawCircle(color = Color.White, radius = 9.dp.toPx(), center = Offset(dX, dY))
+                drawCircle(color = ErrorRed, radius = 6.dp.toPx(), center = Offset(dX, dY))
+
+                val labelText = "Drop-off: ${dropoffLocationName?.split(",")?.get(0)?.take(16) ?: "Selected"}"
+                val labelStyle = TextStyle(fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = BrandBlueDark)
+                val measured = textMeasurer.measure(labelText, labelStyle)
+                val pillWidth = measured.size.width + 12.dp.toPx()
+                val pillHeight = measured.size.height + 6.dp.toPx()
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.95f),
+                    topLeft = Offset(dX - pillWidth / 2f, dY - 18.dp.toPx() - pillHeight),
+                    size = androidx.compose.ui.geometry.Size(pillWidth, pillHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f, 10f)
+                )
+                drawRoundRect(
+                    color = ErrorRed,
+                    topLeft = Offset(dX - pillWidth / 2f, dY - 18.dp.toPx() - pillHeight),
+                    size = androidx.compose.ui.geometry.Size(pillWidth, pillHeight),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f, 10f),
+                    style = Stroke(width = 2f)
+                )
+                drawText(measured, topLeft = Offset(dX - pillWidth / 2f + 6.dp.toPx(), dY - 18.dp.toPx() - pillHeight + 3.dp.toPx()))
+            }
+
+            // 12. Route polyline & distance calculation between pickup and dropoff
+            if (pickupLat != null && pickupLng != null && dropoffLat != null && dropoffLng != null && !isActiveRide) {
+                val pX = getX(pickupLng)
+                val pY = getY(pickupLat)
+                val dX = getX(dropoffLng)
+                val dY = getY(dropoffLat)
+
+                drawLine(
+                    color = BrandBluePrimary,
+                    start = Offset(pX, pY),
+                    end = Offset(dX, dY),
+                    strokeWidth = 4.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 12f), 0f)
+                )
+
+                val distKm = calculateDistance(pickupLat, pickupLng, dropoffLat, dropoffLng)
+                val estMin = (distKm * 3.2 + 2).toInt().coerceAtLeast(2)
+                val routeLabel = "${String.format(java.util.Locale.US, "%.1f", distKm)} km • ~$estMin min"
+                val routeStyle = TextStyle(fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                val measured = textMeasurer.measure(routeLabel, routeStyle)
+                val midX = (pX + dX) / 2f
+                val midY = (pY + dY) / 2f
+                val pillW = measured.size.width + 14.dp.toPx()
+                val pillH = measured.size.height + 8.dp.toPx()
+
+                drawRoundRect(
+                    color = BrandBlueDark,
+                    topLeft = Offset(midX - pillW / 2f, midY - pillH / 2f),
+                    size = androidx.compose.ui.geometry.Size(pillW, pillH),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(12f, 12f)
+                )
+                drawText(measured, topLeft = Offset(midX - pillW / 2f + 7.dp.toPx(), midY - pillH / 2f + 4.dp.toPx()))
+            }
+
+            // 13. Draw Tapped Interactive Pin (Amber pulsing halo)
+            tappedPinLocation?.let { pin ->
+                val tX = getX(pin.lng)
+                val tY = getY(pin.lat)
+
+                drawCircle(color = AccentAmber.copy(alpha = 0.4f), radius = 22.dp.toPx() * pulseScale, center = Offset(tX, tY))
+                drawCircle(color = Color.White, radius = 11.dp.toPx(), center = Offset(tX, tY))
+                drawCircle(color = AccentAmber, radius = 8.dp.toPx(), center = Offset(tX, tY))
             }
         }
 
@@ -509,6 +785,26 @@ fun WayGoMapView(
                             },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Color(0xFFF44336),
+                                selectedLabelColor = Color.White
+                            ),
+                            modifier = Modifier.height(26.dp)
+                        )
+
+                        // Surge Heatmap Toggle Button
+                        FilterChip(
+                            selected = showHeatmap,
+                            onClick = { showHeatmap = !showHeatmap },
+                            label = { Text("Heatmap", fontSize = 9.5.sp) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Whatshot,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = if (showHeatmap) Color.White else NeutralGray
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFFF5722),
                                 selectedLabelColor = Color.White
                             ),
                             modifier = Modifier.height(26.dp)
@@ -818,6 +1114,153 @@ fun WayGoMapView(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Request Ride with ${selectedDriver.name.split(" ")[0]}", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                             }
+                        }
+                    }
+                }
+            }
+
+            // Interactive Tapped Location Pin Bottom Sheet Card
+            AnimatedVisibility(
+                visible = tappedPinLocation != null,
+                enter = fadeIn() + androidx.compose.animation.slideInVertically { it },
+                exit = fadeOut() + androidx.compose.animation.slideOutVertically { it },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .zIndex(20f)
+            ) {
+                tappedPinLocation?.let { pin ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                            .testTag("tapped_location_pin_card"),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 10.dp),
+                        border = BorderStroke(1.dp, AccentAmber.copy(alpha = 0.4f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = AccentAmber.copy(alpha = 0.15f),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.Place, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(20.dp))
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(pin.name, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = BrandBlueDark)
+                                        Text(
+                                            String.format(java.util.Locale.US, "%.4f° N, %.4f° W • Banjul & Kanifing Zone", pin.lat, -pin.lng),
+                                            fontSize = 10.sp,
+                                            color = NeutralGray
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = { tappedPinLocation = null },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close Pin", tint = NeutralGray, modifier = Modifier.size(16.dp))
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        onSetPickupLocation?.invoke(pin.name, pin.lat, pin.lng)
+                                        tappedPinLocation = null
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .testTag("set_map_pin_pickup_btn"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Set as Pickup", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        onSetDropoffLocation?.invoke(pin.name, pin.lat, pin.lng)
+                                        tappedPinLocation = null
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .testTag("set_map_pin_dropoff_btn"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Place, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Set Destination", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Top Banner overlay when Map Picking Mode is active
+            AnimatedVisibility(
+                visible = mapPickingMode != null,
+                enter = fadeIn() + androidx.compose.animation.slideInVertically { -it },
+                exit = fadeOut() + androidx.compose.animation.slideOutVertically { -it },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(25f)
+                    .padding(top = 45.dp, start = 8.dp, end = 8.dp)
+            ) {
+                Surface(
+                    color = BrandBlueDark,
+                    shape = RoundedCornerShape(12.dp),
+                    shadowElevation = 6.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.TouchApp,
+                                contentDescription = null,
+                                tint = AccentAmber,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Tap map to set ${if (mapPickingMode == "PICKUP") "Pickup Location" else "Destination"} in Banjul/Kanifing",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        IconButton(
+                            onClick = { onCancelMapPicking?.invoke() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.White, modifier = Modifier.size(16.dp))
                         }
                     }
                 }

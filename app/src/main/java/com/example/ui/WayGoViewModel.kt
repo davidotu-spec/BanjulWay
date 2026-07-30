@@ -201,13 +201,13 @@ class WayGoViewModel(
     val isPassengerAuthenticating: StateFlow<Boolean> = _isPassengerAuthenticating.asStateFlow()
 
     // Driver Authentication States
-    private val _isDriverLoggedIn = MutableStateFlow(true)
+    private val _isDriverLoggedIn = MutableStateFlow(false)
     val isDriverLoggedIn: StateFlow<Boolean> = _isDriverLoggedIn.asStateFlow()
 
     private val _driverEmail = MutableStateFlow("driver.alieu@waygo.com")
     val driverEmail: StateFlow<String> = _driverEmail.asStateFlow()
 
-    private val _driverPassword = MutableStateFlow("")
+    private val _driverPassword = MutableStateFlow("driver123")
     val driverPassword: StateFlow<String> = _driverPassword.asStateFlow()
 
     private val _isDriverAuthenticating = MutableStateFlow(false)
@@ -238,6 +238,22 @@ class WayGoViewModel(
 
     private val _simulatedDriverLng = MutableStateFlow(-16.6790)
     val simulatedDriverLng: StateFlow<Double> = _simulatedDriverLng.asStateFlow()
+
+    // Ride Start PIN Verification State
+    private val _pinVerificationError = MutableStateFlow("")
+    val pinVerificationError: StateFlow<String> = _pinVerificationError.asStateFlow()
+
+    // Driver Earnings Goal State
+    private val _driverDailyGoalGmd = MutableStateFlow(1500)
+    val driverDailyGoalGmd: StateFlow<Int> = _driverDailyGoalGmd.asStateFlow()
+
+    fun setDriverDailyGoal(goalGmd: Int) {
+        if (goalGmd > 0) _driverDailyGoalGmd.value = goalGmd
+    }
+
+    fun clearPinVerificationError() {
+        _pinVerificationError.value = ""
+    }
 
     // Push Notification System States
     private val _driverNotifications = MutableStateFlow<List<PushNotification>>(emptyList())
@@ -393,6 +409,13 @@ class WayGoViewModel(
                 isNotified = false
             )
             repository.saveScheduledRide(newScheduled)
+
+            triggerDriverPushNotification(
+                driverId = "passenger_alert",
+                driverName = pName,
+                title = "📅 Ride Scheduled!",
+                message = "Your $vehicleType ride from $pickupName to $dropoffName is set for $scheduledTime. Reminders active!"
+            )
         }
     }
 
@@ -950,11 +973,13 @@ class WayGoViewModel(
         pLat: Double,
         pLng: Double,
         dLat: Double,
-        dLng: Double
+        dLng: Double,
+        preferences: String = ""
     ) {
         viewModelScope.launch {
             val tripId = "trip_" + System.currentTimeMillis().toString().takeLast(6)
             val pName = userProfile.value?.name ?: "John Doe"
+            val randomPin = (1000..9999).random().toString()
 
             val newTrip = TripEntity(
                 id = tripId,
@@ -971,7 +996,9 @@ class WayGoViewModel(
                 dropoffLng = dLng,
                 fareGmd = fare,
                 paymentMethod = paymentMethod,
-                status = "REQUESTED"
+                status = "REQUESTED",
+                verificationPin = randomPin,
+                preferences = preferences
             )
 
             repository.saveTrip(newTrip)
@@ -1197,6 +1224,27 @@ class WayGoViewModel(
             _simulatedDriverLng.value = trip.pickupLng
             _simulationProgress.value = 0.38f
             repository.updateDriverLocation(driver.id, trip.pickupLat, trip.pickupLng)
+        }
+    }
+
+    fun beginTransitWithPin(tripId: String, driverId: String, enteredPin: String, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            val trip = repository.getTripById(tripId)
+            if (trip == null) {
+                val err = "Trip session not found."
+                _pinVerificationError.value = err
+                onResult(false, err)
+                return@launch
+            }
+            if (enteredPin.trim() != trip.verificationPin.trim()) {
+                val err = "Invalid PIN code ($enteredPin). Please confirm the 4-digit code with passenger."
+                _pinVerificationError.value = err
+                onResult(false, err)
+                return@launch
+            }
+            _pinVerificationError.value = ""
+            beginTransit(tripId, driverId)
+            onResult(true, "PIN Verified! Ride Started.")
         }
     }
 
