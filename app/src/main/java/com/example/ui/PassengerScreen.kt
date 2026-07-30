@@ -60,10 +60,16 @@ data class GLocation(val name: String, val lat: Double, val lng: Double)
 val GAMBIA_LOCATIONS = listOf(
     GLocation("Albert Market, Banjul", 13.4533, -16.5746),
     GLocation("Arch 22, Banjul", 13.4580, -16.5820),
+    GLocation("Banjul Ferry Terminal", 13.4505, -16.5710),
     GLocation("Kairaba Avenue, Serrekunda", 13.4471, -16.6791),
+    GLocation("Westfield Junction, Serrekunda", 13.4385, -16.6760),
     GLocation("University of Gambia, Kanifing", 13.4452, -16.6713),
+    GLocation("Tippa Garage, Serrekunda", 13.4340, -16.6850),
     GLocation("Senegambia Beach Resort", 13.4420, -16.7110),
-    GLocation("Independence Stadium, Bakau", 13.4722, -16.6690)
+    GLocation("Independence Stadium, Bakau", 13.4722, -16.6690),
+    GLocation("Brusubi Turntable", 13.4020, -16.7180),
+    GLocation("Kotu Beach, Kanifing", 13.4610, -16.7020),
+    GLocation("Pipeline, Serrekunda", 13.4510, -16.6800)
 )
 
 fun resolveLocationForInput(input: String): GLocation {
@@ -663,6 +669,7 @@ fun PassengerAuthView(
                                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandBluePrimary) },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth().testTag("passenger_email_input"),
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = BrandBluePrimary,
                                         unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
@@ -693,6 +700,7 @@ fun PassengerAuthView(
                                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth().testTag("passenger_password_input"),
+                                    textStyle = androidx.compose.ui.text.TextStyle(color = BrandBlueDark),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = BrandBluePrimary,
                                         unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
@@ -1469,6 +1477,7 @@ fun HomeScreenContent(
     // LatLng anchors
     var pCoordinates by remember { mutableStateOf<GLocation?>(null) }
     var dCoordinates by remember { mutableStateOf<GLocation?>(null) }
+    var mapPickingMode by remember { mutableStateOf<String?>(null) }
     var dynamicCalculatedFare by remember { mutableStateOf(150) }
 
     var ratingScore by remember { mutableIntStateOf(5) }
@@ -1537,6 +1546,24 @@ fun HomeScreenContent(
                     simulatedDriverLng = simLng,
                     passengerLat = pCoordinates?.lat ?: 13.4471,
                     passengerLng = pCoordinates?.lng ?: -16.6791,
+                    pickupLocationName = pickupName,
+                    pickupLat = pCoordinates?.lat,
+                    pickupLng = pCoordinates?.lng,
+                    dropoffLocationName = dropoffName,
+                    dropoffLat = dCoordinates?.lat,
+                    dropoffLng = dCoordinates?.lng,
+                    mapPickingMode = mapPickingMode,
+                    onSetPickupLocation = { name, lat, lng ->
+                        pickupName = name
+                        pCoordinates = GLocation(name, lat, lng)
+                        mapPickingMode = null
+                    },
+                    onSetDropoffLocation = { name, lat, lng ->
+                        dropoffName = name
+                        dCoordinates = GLocation(name, lat, lng)
+                        mapPickingMode = null
+                    },
+                    onCancelMapPicking = { mapPickingMode = null },
                     progress = progress,
                     onSelectDriver = { selectedDriver ->
                         selectVehicleType = selectedDriver.vehicleType
@@ -1911,6 +1938,88 @@ fun HomeScreenContent(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
+                        // Map Location Picking Shortcut Bar
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                onClick = { mapPickingMode = if (mapPickingMode == "PICKUP") null else "PICKUP" },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (mapPickingMode == "PICKUP") SuccessGreen else SuccessGreen.copy(alpha = 0.1f),
+                                border = BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f).testTag("pick_pickup_on_map_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PinDrop,
+                                        contentDescription = null,
+                                        tint = if (mapPickingMode == "PICKUP") Color.White else SuccessGreen,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (mapPickingMode == "PICKUP") "Tap Map Above" else "Pick Pickup on Map",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (mapPickingMode == "PICKUP") Color.White else SuccessGreen
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                onClick = { mapPickingMode = if (mapPickingMode == "DROPOFF") null else "DROPOFF" },
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (mapPickingMode == "DROPOFF") BrandBluePrimary else BrandBluePrimary.copy(alpha = 0.1f),
+                                border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f).testTag("pick_dropoff_on_map_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Place,
+                                        contentDescription = null,
+                                        tint = if (mapPickingMode == "DROPOFF") Color.White else BrandBluePrimary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (mapPickingMode == "DROPOFF") "Tap Map Above" else "Pick Destination on Map",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (mapPickingMode == "DROPOFF") Color.White else BrandBluePrimary
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    val tempName = pickupName
+                                    val tempCoords = pCoordinates
+                                    pickupName = dropoffName
+                                    pCoordinates = dCoordinates
+                                    dropoffName = tempName
+                                    dCoordinates = tempCoords
+                                },
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(BrandBlueDark.copy(alpha = 0.06f), CircleShape)
+                                    .testTag("swap_locations_btn")
+                            ) {
+                                Icon(Icons.Default.SwapVert, contentDescription = "Swap Locations", tint = BrandBlueDark, modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         // Pickup Input
                         OutlinedTextField(
                             value = pickupName,
@@ -2150,8 +2259,56 @@ fun HomeScreenContent(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        // Ride Customization Preferences Filters
+                        var prefQuiet by remember { mutableStateOf(false) }
+                        var prefAc by remember { mutableStateOf(false) }
+                        var prefLuggage by remember { mutableStateOf(false) }
+                        var prefPet by remember { mutableStateOf(false) }
 
+                        val selectedPreferences = remember(prefQuiet, prefAc, prefLuggage, prefPet) {
+                            listOfNotNull(
+                                if (prefQuiet) "🤫 Quiet Ride" else null,
+                                if (prefAc) "❄️ AC On" else null,
+                                if (prefLuggage) "🧳 Luggage Help" else null,
+                                if (prefPet) "🐾 Pet Friendly" else null
+                            ).joinToString(" • ")
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text("Ride Customization Preferences", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = prefQuiet,
+                                onClick = { prefQuiet = !prefQuiet },
+                                label = { Text("Quiet 🤫", fontSize = 10.5.sp) },
+                                modifier = Modifier.height(30.dp)
+                            )
+                            FilterChip(
+                                selected = prefAc,
+                                onClick = { prefAc = !prefAc },
+                                label = { Text("AC ❄️", fontSize = 10.5.sp) },
+                                modifier = Modifier.height(30.dp)
+                            )
+                            FilterChip(
+                                selected = prefLuggage,
+                                onClick = { prefLuggage = !prefLuggage },
+                                label = { Text("Luggage 🧳", fontSize = 10.5.sp) },
+                                modifier = Modifier.height(30.dp)
+                            )
+                            FilterChip(
+                                selected = prefPet,
+                                onClick = { prefPet = !prefPet },
+                                label = { Text("Pets 🐾", fontSize = 10.5.sp) },
+                                modifier = Modifier.height(30.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // Submit Button
                         Button(
@@ -2165,6 +2322,7 @@ fun HomeScreenContent(
                                             vehicleType = selectVehicleType,
                                             paymentMethod = "FLUTTERWAVE (LINKED)",
                                             fare = dynamicCalculatedFare,
+                                            preferences = selectedPreferences,
                                             pLat = pCoordinates?.lat ?: 13.4471,
                                             pLng = pCoordinates?.lng ?: -16.6791,
                                             dLat = dCoordinates?.lat ?: 13.4533,
@@ -2224,6 +2382,7 @@ fun HomeScreenContent(
                                         vehicleType = selectVehicleType,
                                         paymentMethod = selectPaymentMethod,
                                         fare = dynamicCalculatedFare,
+                                        preferences = selectedPreferences,
                                         pLat = pCoordinates?.lat ?: 13.4471,
                                         pLng = pCoordinates?.lng ?: -16.6791,
                                         dLat = dCoordinates?.lat ?: 13.4533,
@@ -2627,7 +2786,43 @@ fun HomeScreenContent(
                             trackColor = BrandBlueLight
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // SAFETY PIN CODE DISPLAY CARD
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("passenger_safety_pin_card"),
+                            colors = CardDefaults.cardColors(containerColor = AccentAmber.copy(alpha = 0.12f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AccentAmber)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(42.dp),
+                                    shape = CircleShape,
+                                    color = AccentAmber
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = activeTrip!!.verificationPin,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 15.sp,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                Column {
+                                    Text("Ride Safety PIN: ${activeTrip!!.verificationPin}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                    Text("Provide this 4-digit code to your driver upon pickup to start your ride.", fontSize = 11.sp, color = NeutralGray)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         // Driver card info (if accepted)
                         if (activeTrip!!.driverName != null) {
@@ -3017,19 +3212,21 @@ fun HomeScreenContent(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         if (activeTrip!!.status != "COMPLETED") {
+                            var showRiderCancelDialog by remember { mutableStateOf(false) }
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedButton(
-                                    onClick = { viewModel.cancelTripActive(activeTrip!!.id) },
+                                    onClick = { showRiderCancelDialog = true },
                                     modifier = Modifier.weight(1f).height(48.dp).testTag("cancel_ride_button"),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeutralGray),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                                    border = androidx.compose.foundation.BorderStroke(1.5.dp, ErrorRed.copy(alpha = 0.5f))
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Cancel")
+                                    Icon(Icons.Default.Close, contentDescription = "Cancel", tint = ErrorRed)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Cancel Ride", fontSize = 12.sp)
+                                    Text("Cancel Ride", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ErrorRed)
                                 }
 
                                 var showSosActiveDialog by remember { mutableStateOf(false) }
@@ -3053,6 +3250,18 @@ fun HomeScreenContent(
                                         onDismiss = { showSosActiveDialog = false }
                                     )
                                 }
+                            }
+
+                            if (showRiderCancelDialog) {
+                                RiderCancelConfirmationDialog(
+                                    pickupName = activeTrip!!.pickupName,
+                                    dropoffName = activeTrip!!.dropoffName,
+                                    onConfirmCancel = { selectedReason ->
+                                        viewModel.cancelTripActive(activeTrip!!.id, selectedReason)
+                                        showRiderCancelDialog = false
+                                    },
+                                    onDismiss = { showRiderCancelDialog = false }
+                                )
                             }
                         } else {
                             val matchedDriver = drivers.firstOrNull { it.id == activeTrip!!.driverId }
@@ -7017,6 +7226,121 @@ fun StripeCheckoutDialog(
             }
         }
     }
+}
+
+@Composable
+fun RiderCancelConfirmationDialog(
+    pickupName: String,
+    dropoffName: String,
+    onConfirmCancel: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedReason by remember { mutableStateOf("Changed my mind / No longer needed") }
+    var customNotes by remember { mutableStateOf("") }
+
+    val cancellationReasons = listOf(
+        "Changed my mind / No longer needed",
+        "Driver is taking too long to arrive",
+        "Booked by mistake",
+        "Driver asked me to cancel",
+        "Found alternative transportation",
+        "Price or payment method issue"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Cancel, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Cancel Your Ride?", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BrandBlueDark)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = BrandBlueLight.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("Active Route", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BrandBlueDark)
+                        Text("${pickupName.split(",")[0]} ➔ ${dropoffName.split(",")[0]}", fontSize = 12.sp, color = NeutralGray)
+                    }
+                }
+
+                Text("Please choose a reason for cancelling:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = BrandBlueDark)
+
+                cancellationReasons.forEach { reason ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selectedReason == reason) BrandBluePrimary.copy(alpha = 0.1f) else Color.Transparent)
+                            .clickable { selectedReason = reason }
+                            .padding(vertical = 4.dp, horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = (selectedReason == reason),
+                            onClick = { selectedReason = reason },
+                            colors = RadioButtonDefaults.colors(selectedColor = BrandBluePrimary)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(reason, fontSize = 12.sp, color = BrandBlueDark, fontWeight = if (selectedReason == reason) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+
+                OutlinedTextField(
+                    value = customNotes,
+                    onValueChange = { customNotes = it },
+                    placeholder = { Text("Additional feedback (optional)...", fontSize = 11.sp) },
+                    modifier = Modifier.fillMaxWidth().testTag("cancel_ride_notes_input"),
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SuccessGreen.copy(alpha = 0.12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Zero Cancellation Fee • Instant Free Cancellation", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalReason = if (customNotes.isNotBlank()) "$selectedReason: $customNotes" else selectedReason
+                    onConfirmCancel(finalReason)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                modifier = Modifier.testTag("confirm_cancel_ride_btn")
+            ) {
+                Text("Confirm Cancellation", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("dismiss_cancel_ride_btn")
+            ) {
+                Text("Keep My Ride", fontWeight = FontWeight.Bold, color = BrandBlueDark)
+            }
+        }
+    )
 }
 
 // Data models for Account Hub items
