@@ -3212,19 +3212,21 @@ fun HomeScreenContent(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         if (activeTrip!!.status != "COMPLETED") {
+                            var showRiderCancelDialog by remember { mutableStateOf(false) }
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedButton(
-                                    onClick = { viewModel.cancelTripActive(activeTrip!!.id) },
+                                    onClick = { showRiderCancelDialog = true },
                                     modifier = Modifier.weight(1f).height(48.dp).testTag("cancel_ride_button"),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeutralGray),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                                    border = androidx.compose.foundation.BorderStroke(1.5.dp, ErrorRed.copy(alpha = 0.5f))
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Cancel")
+                                    Icon(Icons.Default.Close, contentDescription = "Cancel", tint = ErrorRed)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Cancel Ride", fontSize = 12.sp)
+                                    Text("Cancel Ride", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ErrorRed)
                                 }
 
                                 var showSosActiveDialog by remember { mutableStateOf(false) }
@@ -3248,6 +3250,18 @@ fun HomeScreenContent(
                                         onDismiss = { showSosActiveDialog = false }
                                     )
                                 }
+                            }
+
+                            if (showRiderCancelDialog) {
+                                RiderCancelConfirmationDialog(
+                                    pickupName = activeTrip!!.pickupName,
+                                    dropoffName = activeTrip!!.dropoffName,
+                                    onConfirmCancel = { selectedReason ->
+                                        viewModel.cancelTripActive(activeTrip!!.id, selectedReason)
+                                        showRiderCancelDialog = false
+                                    },
+                                    onDismiss = { showRiderCancelDialog = false }
+                                )
                             }
                         } else {
                             val matchedDriver = drivers.firstOrNull { it.id == activeTrip!!.driverId }
@@ -7212,6 +7226,121 @@ fun StripeCheckoutDialog(
             }
         }
     }
+}
+
+@Composable
+fun RiderCancelConfirmationDialog(
+    pickupName: String,
+    dropoffName: String,
+    onConfirmCancel: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedReason by remember { mutableStateOf("Changed my mind / No longer needed") }
+    var customNotes by remember { mutableStateOf("") }
+
+    val cancellationReasons = listOf(
+        "Changed my mind / No longer needed",
+        "Driver is taking too long to arrive",
+        "Booked by mistake",
+        "Driver asked me to cancel",
+        "Found alternative transportation",
+        "Price or payment method issue"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Cancel, contentDescription = null, tint = ErrorRed, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Cancel Your Ride?", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = BrandBlueDark)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = BrandBlueLight.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("Active Route", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BrandBlueDark)
+                        Text("${pickupName.split(",")[0]} ➔ ${dropoffName.split(",")[0]}", fontSize = 12.sp, color = NeutralGray)
+                    }
+                }
+
+                Text("Please choose a reason for cancelling:", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = BrandBlueDark)
+
+                cancellationReasons.forEach { reason ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (selectedReason == reason) BrandBluePrimary.copy(alpha = 0.1f) else Color.Transparent)
+                            .clickable { selectedReason = reason }
+                            .padding(vertical = 4.dp, horizontal = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = (selectedReason == reason),
+                            onClick = { selectedReason = reason },
+                            colors = RadioButtonDefaults.colors(selectedColor = BrandBluePrimary)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(reason, fontSize = 12.sp, color = BrandBlueDark, fontWeight = if (selectedReason == reason) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+
+                OutlinedTextField(
+                    value = customNotes,
+                    onValueChange = { customNotes = it },
+                    placeholder = { Text("Additional feedback (optional)...", fontSize = 11.sp) },
+                    modifier = Modifier.fillMaxWidth().testTag("cancel_ride_notes_input"),
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp)
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = SuccessGreen.copy(alpha = 0.12f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Zero Cancellation Fee • Instant Free Cancellation", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalReason = if (customNotes.isNotBlank()) "$selectedReason: $customNotes" else selectedReason
+                    onConfirmCancel(finalReason)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                modifier = Modifier.testTag("confirm_cancel_ride_btn")
+            ) {
+                Text("Confirm Cancellation", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("dismiss_cancel_ride_btn")
+            ) {
+                Text("Keep My Ride", fontWeight = FontWeight.Bold, color = BrandBlueDark)
+            }
+        }
+    )
 }
 
 // Data models for Account Hub items

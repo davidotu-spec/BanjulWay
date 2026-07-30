@@ -1291,11 +1291,19 @@ class WayGoViewModel(
         }
     }
 
-    fun cancelTripActive(tripId: String) {
+    fun cancelTripActive(tripId: String, reason: String = "Rider cancelled") {
         viewModelScope.launch {
             simulationJob?.cancel()
             repository.updateTripStatus(tripId, "CANCELLED")
             _simulationProgress.value = 0f
+
+            val passengerName = userProfile.value?.name ?: "Rider"
+            triggerDriverPushNotification(
+                driverId = "passenger_alert",
+                driverName = passengerName,
+                title = "🚫 Ride Cancelled",
+                message = "Ride session was cancelled ($reason). No cancellation fee charged."
+            )
         }
     }
 
