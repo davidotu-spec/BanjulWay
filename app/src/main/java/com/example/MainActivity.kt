@@ -111,8 +111,11 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
 
         // Modal Bottom Sheet to switch between distinct app sections
         if (showSectionSelectorSheet) {
+            val isAdminLoggedIn by viewModel.isAdminLoggedIn.collectAsState()
+            val isSecretAdminUnlocked by viewModel.isSecretAdminUnlocked.collectAsState()
             AppSectionSelectionSheet(
                 activeRole = activeRole,
+                isAdminLoggedIn = isAdminLoggedIn || isSecretAdminUnlocked,
                 onRoleSelected = { newRole ->
                     viewModel.setRole(newRole)
                 },
@@ -312,6 +315,7 @@ fun showAndroidSystemNotification(context: Context, title: String, message: Stri
 @Composable
 fun AppSectionSelectionSheet(
     activeRole: String,
+    isAdminLoggedIn: Boolean = false,
     onRoleSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -393,20 +397,22 @@ fun AppSectionSelectionSheet(
                 modifier = Modifier.testTag("segment_driver")
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            if (isAdminLoggedIn) {
+                Spacer(modifier = Modifier.height(10.dp))
 
-            // Section 3: Admin Panel
-            SectionOptionCard(
-                title = "Admin Panel Section",
-                subtitle = "System overview, driver onboarding approvals & trip analytics",
-                icon = Icons.Default.AdminPanelSettings,
-                isSelected = activeRole == "ADMIN",
-                onClick = {
-                    onRoleSelected("ADMIN")
-                    onDismiss()
-                },
-                modifier = Modifier.testTag("segment_admin")
-            )
+                // Section 3: Admin Panel (Only visible to signed-in Admin)
+                SectionOptionCard(
+                    title = "Admin Panel Section",
+                    subtitle = "System overview, driver onboarding approvals & trip analytics",
+                    icon = Icons.Default.AdminPanelSettings,
+                    isSelected = activeRole == "ADMIN",
+                    onClick = {
+                        onRoleSelected("ADMIN")
+                        onDismiss()
+                    },
+                    modifier = Modifier.testTag("segment_admin")
+                )
+            }
         }
     }
 }

@@ -141,6 +141,32 @@ class WayGoViewModel(
     private val _isUserLoggedIn = MutableStateFlow(false) // Require sign up or login on app startup
     val isUserLoggedIn: StateFlow<Boolean> = _isUserLoggedIn.asStateFlow()
 
+    // Hidden Administrative Portal Unlock State
+    private val _isSecretAdminUnlocked = MutableStateFlow(false)
+    val isSecretAdminUnlocked: StateFlow<Boolean> = _isSecretAdminUnlocked.asStateFlow()
+
+    fun unlockAdminPortal(secretKey: String): Boolean {
+        val clean = secretKey.trim()
+        val validPasskeys = setOf(
+            "WAYGO-ADMIN-SECRET-2026",
+            "WAYGO-ADMIN-2026",
+            "*#WAYGO#ADMIN#*",
+            "*#ADMIN#*",
+            "ADMIN2026",
+            "admin123",
+            "waygoadmin"
+        )
+        if (validPasskeys.any { it.equals(clean, ignoreCase = true) }) {
+            _isSecretAdminUnlocked.value = true
+            return true
+        }
+        return false
+    }
+
+    fun toggleSecretAdminUnlocked() {
+        _isSecretAdminUnlocked.value = !_isSecretAdminUnlocked.value
+    }
+
     // Admin Auth State (Email/Password for Enterprise Operations Portal)
     private val _isAdminLoggedIn = MutableStateFlow(false)
     val isAdminLoggedIn: StateFlow<Boolean> = _isAdminLoggedIn.asStateFlow()
@@ -1023,6 +1049,26 @@ class WayGoViewModel(
     }
 
     /**
+     * Calculates an estimated fare result based on distance between current pickup coordinates
+     * and destination coordinates before a ride request is finalized.
+     */
+    fun calculatePreBookingFareEstimate(
+        pLat: Double, pLng: Double,
+        dLat: Double, dLng: Double,
+        vehicleType: String = "CAR",
+        surchargeTier: String = "STANDARD"
+    ): FareEstimateResult {
+        return TripFareEstimationService.estimateFare(
+            pLat = pLat,
+            pLng = pLng,
+            dLat = dLat,
+            dLng = dLng,
+            vehicleType = vehicleType,
+            surchargeTier = surchargeTier
+        )
+    }
+
+    /**
      * Finds and sorts nearby approved online drivers by proximity to the passenger's location.
      */
     suspend fun getNearestAvailableDrivers(
@@ -1206,6 +1252,23 @@ class WayGoViewModel(
                 status = "ACCEPTED"
             )
             repository.saveTrip(updatedTrip)
+            FirestoreRideService.updateRideRequestStatus(
+                requestId = tripId,
+                status = "ACCEPTED",
+                driverId = driver.id,
+                driverName = driver.name,
+                driverPhone = driver.phone,
+                vehiclePlate = driver.vehiclePlate
+            )
+
+            // Trigger local notification for passenger
+            triggerDriverPushNotification(
+                driverId = "passenger_alert",
+                driverName = driver.name,
+                title = "✅ Ride Request Accepted!",
+                message = "${driver.name} (${driver.vehiclePlate}) accepted your request and is heading to your pickup location.",
+                trip = updatedTrip
+            )
 
             // Start visual simulation of driving
             startLiveTrackerSimulation(updatedTrip, driver)
@@ -1295,6 +1358,7 @@ class WayGoViewModel(
         viewModelScope.launch {
             simulationJob?.cancel()
             repository.updateTripStatus(tripId, "CANCELLED")
+            FirestoreRideService.updateRideRequestStatus(tripId, "CANCELLED")
             _simulationProgress.value = 0f
 
             val passengerName = userProfile.value?.name ?: "Rider"
@@ -1337,6 +1401,17 @@ class WayGoViewModel(
                 _simulatedDriverLng.value = currentLng
                 _simulationProgress.value = ratio * 0.35f
 
+                // Alert passenger when driver is nearing pickup location
+                if (step == 4) {
+                    triggerDriverPushNotification(
+                        driverId = "passenger_alert",
+                        driverName = driver.name,
+                        title = "🚖 Driver Nearing Pickup!",
+                        message = "${driver.name} is arriving in less than 2 minutes at ${trip.pickupName.split(",")[0]}.",
+                        trip = trip
+                    )
+                }
+
                 repository.updateDriverLocation(driver.id, currentLat, currentLng)
                 delay(1200)
             }
@@ -1344,6 +1419,14 @@ class WayGoViewModel(
             // Phase 2: Arrived at pickup
             if (repository.getTripById(trip.id)?.status == "CANCELLED") return@launch
             repository.updateTripStatus(trip.id, "ARRIVED")
+            FirestoreRideService.updateRideRequestStatus(trip.id, "ARRIVED")
+            triggerDriverPushNotification(
+                driverId = "passenger_alert",
+                driverName = driver.name,
+                title = "📍 Driver Has Arrived!",
+                message = "${driver.name} is waiting at ${trip.pickupName.split(",")[0]}. Verification PIN: ${trip.verificationPin}",
+                trip = trip
+            )
             _simulatedDriverLat.value = trip.pickupLat
             _simulatedDriverLng.value = trip.pickupLng
             _simulationProgress.value = 0.38f
@@ -1593,6 +1676,7 @@ class WayGoViewModel(
         _isAdminLoggedIn.value = false
         _adminAuthError.value = ""
         _adminPassword.value = ""
+        _currentRole.value = "PASSENGER"
     }
 
     fun loginWithOidcProvider(
