@@ -674,7 +674,7 @@ fun DriverScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
                                     Text("Application Standard Review", fontWeight = FontWeight.Bold, color = ErrorRed, fontSize = 13.sp)
-                                    Text("Your license & tricycle/car registration files are awaiting approval. Switch to Admin Portal to approve this driver instantly!", fontSize = 11.sp)
+                                    Text("Your license & vehicle registration files are awaiting verification by WayGo Admin staff.", fontSize = 11.sp)
                                 }
                             }
                         }

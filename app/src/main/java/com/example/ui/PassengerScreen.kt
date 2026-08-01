@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -115,6 +117,8 @@ fun PassengerScreen(
     val smsGatewayStatus by viewModel.smsGatewayStatus.collectAsState()
     val isRealSmsSent by viewModel.isRealSmsSent.collectAsState()
     val isOtpSending by viewModel.isOtpSending.collectAsState()
+    val isAdminLoggedIn by viewModel.isAdminLoggedIn.collectAsState()
+    val isSecretAdminUnlocked by viewModel.isSecretAdminUnlocked.collectAsState()
 
     // Authentication Gate
     if (!isLoggedIn) {
@@ -132,7 +136,10 @@ fun PassengerScreen(
             onEmailLogin = { email, pass -> viewModel.loginPassengerWithEmail(email, pass) },
             onEmailRegister = { email, pass, name -> viewModel.registerPassengerWithEmail(email, pass, name) },
             onSocialLogin = { provider -> viewModel.socialLoginPassenger(provider) },
-            onSelectRole = { newRole -> viewModel.setRole(newRole) }
+            onSelectRole = { newRole -> viewModel.setRole(newRole) },
+            isAdminLoggedIn = isAdminLoggedIn,
+            isSecretAdminUnlocked = isSecretAdminUnlocked,
+            onUnlockAdminPortal = { key -> viewModel.unlockAdminPortal(key) }
         )
         return
     }
@@ -350,8 +357,27 @@ fun AuthRoleSectionTabs(
     activeRole: String,
     onSelectRole: (String) -> Unit,
     modifier: Modifier = Modifier,
-    isDarkBg: Boolean = true
+    isDarkBg: Boolean = true,
+    isAdminLoggedIn: Boolean = false,
+    isSecretAdminUnlocked: Boolean = false,
+    onLongPressHeader: (() -> Unit)? = null
 ) {
+    val isAdminPortalVisible = isAdminLoggedIn || isSecretAdminUnlocked || activeRole == "ADMIN"
+    val roles = remember(isAdminPortalVisible) {
+        if (isAdminPortalVisible) {
+            listOf(
+                Triple("PASSENGER", "Passenger", "🙋‍♂️"),
+                Triple("DRIVER", "Driver Fleet", "🚗"),
+                Triple("ADMIN", "Admin Portal", "🛡️")
+            )
+        } else {
+            listOf(
+                Triple("PASSENGER", "Passenger", "🙋‍♂️"),
+                Triple("DRIVER", "Driver Fleet", "🚗")
+            )
+        }
+    }
+
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = if (isDarkBg) PureWhite.copy(alpha = 0.12f) else BrandBlueLight,
@@ -370,18 +396,22 @@ fun AuthRoleSectionTabs(
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (isDarkBg) PureWhite.copy(alpha = 0.8f) else NeutralGray,
-                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                modifier = Modifier
+                    .padding(start = 4.dp, bottom = 4.dp)
+                    .then(
+                        if (onLongPressHeader != null) {
+                            Modifier.pointerInput(Unit) {
+                                detectTapGestures(onLongPress = { onLongPressHeader() })
+                            }
+                        } else Modifier
+                    )
             )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                listOf(
-                    Triple("PASSENGER", "Passenger", "🙋‍♂️"),
-                    Triple("DRIVER", "Driver Fleet", "🚗"),
-                    Triple("ADMIN", "Admin Portal", "🛡️")
-                ).forEach { (roleKey, label, icon) ->
+                roles.forEach { (roleKey, label, icon) ->
                     val isSelected = activeRole == roleKey
                     Box(
                         modifier = Modifier
@@ -391,7 +421,18 @@ fun AuthRoleSectionTabs(
                             .background(
                                 if (isSelected) BrandBluePrimary else Color.Transparent
                             )
-                            .clickable { onSelectRole(roleKey) },
+                            .then(
+                                if (onLongPressHeader != null) {
+                                    Modifier.pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onTap = { onSelectRole(roleKey) },
+                                            onLongPress = { onLongPressHeader() }
+                                        )
+                                    }
+                                } else {
+                                    Modifier.clickable { onSelectRole(roleKey) }
+                                }
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -432,8 +473,16 @@ fun PassengerAuthView(
     onEmailLogin: (String, String) -> Unit = { _, _ -> },
     onEmailRegister: (String, String, String) -> Unit = { _, _, _ -> },
     onSocialLogin: (String) -> Unit = {},
-    onSelectRole: (String) -> Unit = {}
+    onSelectRole: (String) -> Unit = {},
+    isAdminLoggedIn: Boolean = false,
+    isSecretAdminUnlocked: Boolean = false,
+    onUnlockAdminPortal: (String) -> Boolean = { false }
 ) {
+    var showSecretAdminDialog by remember { mutableStateOf(false) }
+    var secretPasskeyInput by remember { mutableStateOf("") }
+    var secretPasskeyError by remember { mutableStateOf("") }
+    var secretUnlockBannerMsg by remember { mutableStateOf("") }
+
     val countries = remember {
         listOf(
             CountryCode("+220", "Gambia", "🇬🇲", "7xxxxxx / 3xxxxxx"),
@@ -532,7 +581,7 @@ fun PassengerAuthView(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Circular WayGo Brand Icon Badge
+            // Circular WayGo Brand Icon Badge (Long-press to reveal hidden Admin authentication gate)
             Box(
                 modifier = Modifier
                     .size(88.dp)
@@ -541,7 +590,15 @@ fun PassengerAuthView(
                         Brush.linearGradient(
                             colors = listOf(BrandBlueSecondary, BrandBluePrimary)
                         )
-                    ),
+                    )
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = {
+                                showSecretAdminDialog = true
+                            }
+                        )
+                    }
+                    .testTag("brand_logo_badge_admin_trigger"),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -568,7 +625,14 @@ fun PassengerAuthView(
                 text = "The Gambia's Modern Ride Network",
                 fontSize = 13.sp,
                 color = PureWhite.copy(alpha = 0.75f),
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = {
+                            showSecretAdminDialog = true
+                        }
+                    )
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -577,8 +641,44 @@ fun PassengerAuthView(
             AuthRoleSectionTabs(
                 activeRole = "PASSENGER",
                 onSelectRole = onSelectRole,
-                isDarkBg = true
+                isDarkBg = true,
+                isAdminLoggedIn = isAdminLoggedIn,
+                isSecretAdminUnlocked = isSecretAdminUnlocked,
+                onLongPressHeader = { showSecretAdminDialog = true }
             )
+
+            if (isSecretAdminUnlocked) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = AccentAmber.copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, AccentAmber.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().testTag("secret_admin_unlocked_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.LockOpen, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Admin Portal Unlocked",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite
+                            )
+                        }
+                        TextButton(
+                            onClick = { onSelectRole("ADMIN") },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("Switch to Admin 🛡️", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = AccentAmber)
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -1368,6 +1468,83 @@ fun PassengerAuthView(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // Hidden Administrative Passcode Unlock Dialog
+        if (showSecretAdminDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showSecretAdminDialog = false
+                    secretPasskeyError = ""
+                },
+                icon = {
+                    Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = BrandBluePrimary, modifier = Modifier.size(32.dp))
+                },
+                title = {
+                    Text("Administrative Access Gate", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = BrandBlueDark)
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "Enter corporate administrator passkey to reveal the Admin Portal tab in portal selection.",
+                            fontSize = 12.5.sp,
+                            color = NeutralGray
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = secretPasskeyInput,
+                            onValueChange = {
+                                secretPasskeyInput = it
+                                secretPasskeyError = ""
+                            },
+                            label = { Text("Secret Passkey / Master Key") },
+                            placeholder = { Text("e.g. WAYGO-ADMIN-SECRET-2026") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth().testTag("secret_admin_passkey_input"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = NeutralGray.copy(alpha = 0.4f)
+                            )
+                        )
+                        if (secretPasskeyError.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(secretPasskeyError, color = ErrorRed, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val success = onUnlockAdminPortal(secretPasskeyInput)
+                            if (success) {
+                                showSecretAdminDialog = false
+                                secretPasskeyInput = ""
+                                secretPasskeyError = ""
+                                onSelectRole("ADMIN")
+                            } else {
+                                secretPasskeyError = "Invalid admin secret key. Access denied."
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                        modifier = Modifier.testTag("secret_admin_passkey_submit")
+                    ) {
+                        Text("Unlock & Access Admin", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showSecretAdminDialog = false
+                            secretPasskeyInput = ""
+                            secretPasskeyError = ""
+                        }
+                    ) {
+                        Text("Cancel", color = NeutralGray)
+                    }
+                }
+            )
         }
     }
 }
@@ -4186,6 +4363,7 @@ fun ProfileScreenContent(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val trips by viewModel.allTrips.collectAsState()
+    val isAdminLoggedIn by viewModel.isAdminLoggedIn.collectAsState()
     
     // Active Account Tab state: "PROFILE", "TRIP_LOG", "INBOX", "PAYMENT", "SAFETY", "SAVED_PLACES", "SETTINGS"
     var activeAccountTab by remember(initialSection) { mutableStateOf(initialSection) }
@@ -4737,50 +4915,52 @@ fun ProfileScreenContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                if (isAdminLoggedIn) {
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                // 3. ADMIN PANEL ROW
-                Surface(
-                    onClick = { viewModel.setRole("ADMIN") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.4f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    // 3. ADMIN PANEL ROW
+                    Surface(
+                        onClick = { viewModel.setRole("ADMIN") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.4f))
                     ) {
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(BrandBluePrimary.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.AdminPanelSettings, contentDescription = "Admin Console", tint = BrandBluePrimary, modifier = Modifier.size(20.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(BrandBluePrimary.copy(alpha = 0.12f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.AdminPanelSettings, contentDescription = "Admin Console", tint = BrandBluePrimary, modifier = Modifier.size(20.dp))
+                                }
+                                Column {
+                                    Text("Admin Panel", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                                    Text("Verify drivers, dispatch & support metrics", fontSize = 11.5.sp, color = NeutralGray)
+                                }
                             }
-                            Column {
-                                Text("Admin Panel", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                                Text("Verify drivers, dispatch & support metrics", fontSize = 11.5.sp, color = NeutralGray)
+                            OutlinedButton(
+                                onClick = { viewModel.setRole("ADMIN") },
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) {
+                                Text("Open", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
                             }
-                        }
-                        OutlinedButton(
-                            onClick = { viewModel.setRole("ADMIN") },
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.height(34.dp)
-                        ) {
-                            Text("Open", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
                         }
                     }
                 }
@@ -4800,17 +4980,21 @@ fun ProfileScreenContent(
 
         val unreadInboxCount = inboxMessages.count { !it.isRead }
 
-        val accountSections = listOf(
-            AccountSectionItem("PROFILE", "Profile", Icons.Default.Person, null),
-            AccountSectionItem("TRIP_LOG", "Trip Log", Icons.Default.History, trips.size.takeIf { it > 0 }?.toString()),
-            AccountSectionItem("INBOX", "Inbox", Icons.Default.Inbox, unreadInboxCount.takeIf { it > 0 }?.toString()),
-            AccountSectionItem("DRIVER_HUB", "Driver Hub", Icons.Default.TwoWheeler, "DRIVER"),
-            AccountSectionItem("ADMIN_PANEL", "Admin Console", Icons.Default.AdminPanelSettings, "ADMIN"),
-            AccountSectionItem("PAYMENT", "Payment", Icons.Default.AccountBalanceWallet, if (profile?.isPaymentLinked == true) "Card" else null),
-            AccountSectionItem("SAFETY", "Support & Safety", Icons.Default.Shield, null),
-            AccountSectionItem("SAVED_PLACES", "Saved Places", Icons.Default.Bookmark, null),
-            AccountSectionItem("SETTINGS", "Settings", Icons.Default.Settings, null)
-        )
+        val accountSections = remember(unreadInboxCount, trips.size, profile?.isPaymentLinked, isAdminLoggedIn) {
+            buildList {
+                add(AccountSectionItem("PROFILE", "Profile", Icons.Default.Person, null))
+                add(AccountSectionItem("TRIP_LOG", "Trip Log", Icons.Default.History, trips.size.takeIf { it > 0 }?.toString()))
+                add(AccountSectionItem("INBOX", "Inbox", Icons.Default.Inbox, unreadInboxCount.takeIf { it > 0 }?.toString()))
+                add(AccountSectionItem("DRIVER_HUB", "Driver Hub", Icons.Default.TwoWheeler, "DRIVER"))
+                if (isAdminLoggedIn) {
+                    add(AccountSectionItem("ADMIN_PANEL", "Admin Console", Icons.Default.AdminPanelSettings, "ADMIN"))
+                }
+                add(AccountSectionItem("PAYMENT", "Payment", Icons.Default.AccountBalanceWallet, if (profile?.isPaymentLinked == true) "Card" else null))
+                add(AccountSectionItem("SAFETY", "Support & Safety", Icons.Default.Shield, null))
+                add(AccountSectionItem("SAVED_PLACES", "Saved Places", Icons.Default.Bookmark, null))
+                add(AccountSectionItem("SETTINGS", "Settings", Icons.Default.Settings, null))
+            }
+        }
 
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -6261,6 +6445,35 @@ fun ProfileScreenContent(
                         }
 
                         HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+
+                        if (!isAdminLoggedIn) {
+                            Text("Staff & Admin Portal", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = BrandBlueDark)
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f))
+                                    .clickable { viewModel.setRole("ADMIN") }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Lock, contentDescription = "Staff", tint = NeutralGray, modifier = Modifier.size(18.dp))
+                                    Column {
+                                        Text("Administrator Console Sign In", fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Access operations, verification & dispatch logs", fontSize = 11.sp, color = NeutralGray)
+                                    }
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = "Go", tint = NeutralGray, modifier = Modifier.size(18.dp))
+                            }
+
+                            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                        }
 
                         OutlinedButton(
                             onClick = { viewModel.logout() },
