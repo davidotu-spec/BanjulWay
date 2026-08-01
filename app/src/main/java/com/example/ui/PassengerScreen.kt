@@ -10,6 +10,7 @@ import coil.compose.rememberAsyncImagePainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -712,34 +713,7 @@ fun PassengerAuthView(
                                     shape = RoundedCornerShape(12.dp)
                                 )
 
-                                Spacer(modifier = Modifier.height(12.dp))
 
-                                Text("Quick Demo Accounts:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NeutralGray)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    listOf(
-                                        "passenger@waygo.com" to "Demo Passenger",
-                                        "johndoe@example.com" to "John Doe (VIP)",
-                                        "rider.fatou@waygo.gm" to "Fatou Bah"
-                                    ).forEach { (demoEmail, label) ->
-                                        AssistChip(
-                                            onClick = {
-                                                emailInput = demoEmail
-                                                passwordInput = "pass123"
-                                                nameInput = label.substringBefore(" ")
-                                            },
-                                            label = { Text("👤 $label ($demoEmail)", fontSize = 10.5.sp, fontWeight = FontWeight.Bold) },
-                                            colors = AssistChipDefaults.assistChipColors(
-                                                containerColor = BrandBlueLight,
-                                                labelColor = BrandBlueDark
-                                            ),
-                                            shape = RoundedCornerShape(8.dp),
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-                                }
 
                                 if (authError.isNotEmpty()) {
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -1463,6 +1437,7 @@ fun HomeScreenContent(
 
     var showPickupDropdown by remember { mutableStateOf(false) }
     var showDropoffDropdown by remember { mutableStateOf(false) }
+    var vehicleDropdownExpanded by remember { mutableStateOf(false) }
 
     var selectedSavedPlaceForOptions by remember { mutableStateOf<com.example.data.SavedPlaceEntity?>(null) }
     var showAddSavedPlaceDialog by remember { mutableStateOf(false) }
@@ -2160,8 +2135,82 @@ fun HomeScreenContent(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Vehicle Selector
-                        Text("Select Ride Class", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                        // Vehicle Selector Header & Dropdown
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Select Vehicle Type", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+
+                            // Vehicle Type Dropdown
+                            Box {
+                                OutlinedButton(
+                                    onClick = { vehicleDropdownExpanded = true },
+                                    modifier = Modifier.testTag("vehicle_type_dropdown_btn"),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = BrandBluePrimary.copy(alpha = 0.05f),
+                                        contentColor = BrandBluePrimary
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary)
+                                ) {
+                                    Icon(
+                                        imageVector = if (selectVehicleType == "CAR") Icons.Default.DirectionsCar else Icons.Default.TwoWheeler,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = if (selectVehicleType == "CAR") BrandBluePrimary else AccentAmber
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (selectVehicleType == "CAR") "Car (Sedan) ▾" else "Tricycle (Keke) ▾",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+
+                                DropdownMenu(
+                                    expanded = vehicleDropdownExpanded,
+                                    onDismissRequest = { vehicleDropdownExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = BrandBluePrimary, modifier = Modifier.size(20.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text("Car (WayGo Sedan)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                                    Text("Comfortable 4-seater • Est. ${carFareEstimate} GMD", fontSize = 11.sp, color = NeutralGray)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            selectVehicleType = "CAR"
+                                            vehicleDropdownExpanded = false
+                                        },
+                                        modifier = Modifier.testTag("dropdown_option_car")
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.TwoWheeler, contentDescription = null, tint = AccentAmber, modifier = Modifier.size(20.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text("Tricycle (Keke Express)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = BrandBlueDark)
+                                                    Text("Affordable 3-wheeler • Est. ${tricycleFareEstimate} GMD", fontSize = 11.sp, color = NeutralGray)
+                                                }
+                                            }
+                                        },
+                                        onClick = {
+                                            selectVehicleType = "TRICYCLE"
+                                            vehicleDropdownExpanded = false
+                                        },
+                                        modifier = Modifier.testTag("dropdown_option_tricycle")
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Card(
@@ -2824,362 +2873,621 @@ fun HomeScreenContent(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Driver card info (if accepted)
-                        if (activeTrip!!.driverName != null) {
-                            val matchedDriver = drivers.find { it.id == activeTrip!!.driverId }
-                            var showDriverTrustProfile by remember { mutableStateOf(false) }
-
-                            if (showDriverTrustProfile) {
-                                DriverTrustProfileDialog(
-                                    driver = matchedDriver,
-                                    vehicleType = activeTrip!!.vehicleType,
-                                    vehiclePlate = activeTrip!!.vehiclePlate ?: "BJL 4821 C",
-                                    driverName = activeTrip!!.driverName!!,
-                                    trips = trips,
-                                    onDismiss = { showDriverTrustProfile = false }
-                                )
-                            }
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(BrandBlueLight)
-                                    .padding(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
+                        // Visual State Transition: Searching for drivers loading indicator -> Matched Driver Profile Card
+                        Crossfade(
+                            targetState = (activeTrip!!.driverName != null),
+                            label = "driver_search_fade",
+                            modifier = Modifier.fillMaxWidth()
+                        ) { isDriverMatched ->
+                            if (isDriverMatched) {
+                                // Matched Driver Profile Card State
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(BrandBlueLight)
+                                        .padding(12.dp)
+                                        .testTag("matched_driver_profile_card")
                                 ) {
-                                    // Custom Avatar with Badge Overlay
-                                    Box(
-                                        modifier = Modifier
-                                            .size(50.dp)
-                                            .clickable { showDriverTrustProfile = true }
-                                            .testTag("driver_trust_profile_avatar"),
-                                        contentAlignment = Alignment.BottomEnd
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(46.dp)
-                                                .clip(CircleShape)
-                                                .background(BrandBluePrimary.copy(alpha = 0.12f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            val nameInitials = (activeTrip!!.driverName ?: "GP").split(" ")
-                                                .mapNotNull { it.firstOrNull()?.toString() }
-                                                .joinToString("").take(2).uppercase()
-                                            Text(
-                                                text = nameInitials,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = BrandBluePrimary,
-                                                fontSize = 16.sp
-                                            )
-                                        }
-                                        
-                                        // Trust Mini Check Badge
-                                        Box(
-                                            modifier = Modifier
-                                                .size(18.dp)
-                                                .clip(CircleShape)
-                                                .background(SuccessGreen),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = "Verified Badge",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(11.dp)
-                                            )
+                                    // Simulated Polling Mechanism for Trip Status Updates
+                                    var pollingPulse by remember { mutableStateOf(false) }
+                                    LaunchedEffect(activeTrip?.id, activeTrip?.status) {
+                                        while (true) {
+                                            delay(2000)
+                                            pollingPulse = !pollingPulse
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.width(12.dp))
+                                    val tripStatus = activeTrip?.status ?: "ACCEPTED"
 
-                                    Column(
+                                    var statusTitle by remember { mutableStateOf("Driver En Route") }
+                                    var statusSubtitle by remember { mutableStateOf("Heading to your pickup location") }
+                                    var statusBgColor by remember { mutableStateOf(BrandBluePrimary.copy(alpha = 0.15f)) }
+                                    var statusBorderColor by remember { mutableStateOf(BrandBluePrimary) }
+                                    var statusIcon by remember { mutableStateOf(Icons.Default.Navigation) }
+                                    var stepIndex by remember { mutableStateOf(1) }
+
+                                    when (tripStatus) {
+                                        "ARRIVED" -> {
+                                            statusTitle = "Driver Arrived"
+                                            statusSubtitle = "Driver is waiting at pickup location"
+                                            statusBgColor = AccentAmber.copy(alpha = 0.15f)
+                                            statusBorderColor = AccentAmber
+                                            statusIcon = Icons.Default.PinDrop
+                                            stepIndex = 2
+                                        }
+                                        "EN_ROUTE" -> {
+                                            statusTitle = "Trip in Progress"
+                                            statusSubtitle = "Driving to destination safely"
+                                            statusBgColor = SuccessGreen.copy(alpha = 0.15f)
+                                            statusBorderColor = SuccessGreen
+                                            statusIcon = Icons.Default.DirectionsCar
+                                            stepIndex = 3
+                                        }
+                                        "COMPLETED" -> {
+                                            statusTitle = "Trip Completed"
+                                            statusSubtitle = "Arrived at destination"
+                                            statusBgColor = SuccessGreen.copy(alpha = 0.15f)
+                                            statusBorderColor = SuccessGreen
+                                            statusIcon = Icons.Default.CheckCircle
+                                            stepIndex = 4
+                                        }
+                                        else -> { // ACCEPTED or REQUESTED
+                                            statusTitle = "Driver En Route"
+                                            statusSubtitle = "Heading to your pickup location"
+                                            statusBgColor = BrandBluePrimary.copy(alpha = 0.15f)
+                                            statusBorderColor = BrandBluePrimary
+                                            statusIcon = Icons.Default.Navigation
+                                            stepIndex = 1
+                                        }
+                                    }
+
+                                    // Matched driver notification banner with live status polling tracker
+                                    Surface(
                                         modifier = Modifier
-                                            .weight(1f)
-                                            .clickable { showDriverTrustProfile = true }
-                                            .testTag("driver_trust_profile_clickable_column")
+                                            .fillMaxWidth()
+                                            .padding(bottom = 12.dp)
+                                            .testTag("status_tracker_card"),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = statusBgColor,
+                                        border = BorderStroke(1.dp, statusBorderColor)
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.padding(10.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        imageVector = statusIcon,
+                                                        contentDescription = null,
+                                                        tint = statusBorderColor,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = statusTitle,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 13.sp,
+                                                        color = BrandBlueDark,
+                                                        modifier = Modifier.testTag("status_badge_text")
+                                                    )
+                                                }
+
+                                                // Polling heartbeat badge
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier
+                                                        .clip(CircleShape)
+                                                        .background(PureWhite.copy(alpha = 0.8f))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(7.dp)
+                                                            .clip(CircleShape)
+                                                            .background(if (pollingPulse) SuccessGreen else SuccessGreen.copy(alpha = 0.3f))
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = "Live Sync",
+                                                        fontSize = 9.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = NeutralGray
+                                                    )
+                                                }
+                                            }
+
                                             Text(
-                                                text = activeTrip!!.driverName!!,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp,
-                                                color = BrandBlueDark
+                                                text = statusSubtitle,
+                                                fontSize = 11.sp,
+                                                color = NeutralGray,
+                                                modifier = Modifier.padding(start = 24.dp, bottom = 8.dp)
                                             )
-                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                            // 3-Step Visual Progress Tracker
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                // Step 1: En Route
+                                                StatusStepItem(
+                                                    stepNumber = "1",
+                                                    label = "Driver En Route",
+                                                    isActive = stepIndex >= 1,
+                                                    isCurrent = stepIndex == 1,
+                                                    activeColor = BrandBluePrimary,
+                                                    testTag = "status_step_en_route",
+                                                    modifier = Modifier.weight(1f)
+                                                )
+
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(16.dp)
+                                                        .height(2.dp)
+                                                        .background(if (stepIndex >= 2) AccentAmber else Color.LightGray.copy(alpha = 0.4f))
+                                                )
+
+                                                // Step 2: Arrived
+                                                StatusStepItem(
+                                                    stepNumber = "2",
+                                                    label = "Arrived",
+                                                    isActive = stepIndex >= 2,
+                                                    isCurrent = stepIndex == 2,
+                                                    activeColor = AccentAmber,
+                                                    testTag = "status_step_arrived",
+                                                    modifier = Modifier.weight(1f)
+                                                )
+
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(16.dp)
+                                                        .height(2.dp)
+                                                        .background(if (stepIndex >= 3) SuccessGreen else Color.LightGray.copy(alpha = 0.4f))
+                                                )
+
+                                                // Step 3: Trip in Progress
+                                                StatusStepItem(
+                                                    stepNumber = "3",
+                                                    label = "Trip in Progress",
+                                                    isActive = stepIndex >= 3,
+                                                    isCurrent = stepIndex == 3,
+                                                    activeColor = SuccessGreen,
+                                                    testTag = "status_step_in_progress",
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    val matchedDriver = drivers.find { it.id == activeTrip!!.driverId }
+                                    var showDriverTrustProfile by remember { mutableStateOf(false) }
+
+                                    if (showDriverTrustProfile) {
+                                        DriverTrustProfileDialog(
+                                            driver = matchedDriver,
+                                            vehicleType = activeTrip!!.vehicleType,
+                                            vehiclePlate = activeTrip!!.vehiclePlate ?: "BJL 4821 C",
+                                            driverName = activeTrip!!.driverName!!,
+                                            trips = trips,
+                                            onDismiss = { showDriverTrustProfile = false }
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        // Custom Avatar with Badge Overlay
+                                        Box(
+                                            modifier = Modifier
+                                                .size(50.dp)
+                                                .clickable { showDriverTrustProfile = true }
+                                                .testTag("driver_trust_profile_avatar"),
+                                            contentAlignment = Alignment.BottomEnd
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(46.dp)
+                                                    .clip(CircleShape)
+                                                    .background(BrandBluePrimary.copy(alpha = 0.12f)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                val nameInitials = (activeTrip!!.driverName ?: "GP").split(" ")
+                                                    .mapNotNull { it.firstOrNull()?.toString() }
+                                                    .joinToString("").take(2).uppercase()
+                                                Text(
+                                                    text = nameInitials,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = BrandBluePrimary,
+                                                    fontSize = 16.sp
+                                                )
+                                            }
+                                            
+                                            // Trust Mini Check Badge
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(18.dp)
+                                                    .clip(CircleShape)
+                                                    .background(SuccessGreen),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Verified Badge",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(11.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable { showDriverTrustProfile = true }
+                                                .testTag("driver_trust_profile_clickable_column")
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = activeTrip!!.driverName!!,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 15.sp,
+                                                    color = BrandBlueDark
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Icon(
+                                                    imageVector = Icons.Default.Star,
+                                                    contentDescription = "Rating",
+                                                    tint = AccentAmber,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Text(
+                                                    text = String.format("%.1f", matchedDriver?.rating ?: 4.8f),
+                                                    fontSize = 12.sp,
+                                                    color = BrandBlueDark,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "${if (activeTrip!!.vehicleType == "CAR") "Yellow Sedan" else "Tricycle"} • ${activeTrip!!.vehiclePlate}",
+                                                    fontSize = 12.sp,
+                                                    color = NeutralGray
+                                                )
+                                                // Mini Verification pill badge
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(SuccessGreen.copy(alpha = 0.12f))
+                                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.VerifiedUser,
+                                                            contentDescription = "Verified",
+                                                            tint = SuccessGreen,
+                                                            modifier = Modifier.size(10.dp)
+                                                        )
+                                                        Text(
+                                                            text = "Verified",
+                                                            color = SuccessGreen,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 9.sp
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Interactive messaging & chat
+                                        var showChatDialog by remember { mutableStateOf(false) }
+                                        IconButton(
+                                            onClick = { showChatDialog = true },
+                                            modifier = Modifier
+                                                .testTag("passenger_chat_launcher")
+                                                .background(BrandBlueSecondary, CircleShape)
+                                                .size(40.dp)
+                                        ) {
                                             Icon(
-                                                imageVector = Icons.Default.Star,
-                                                contentDescription = "Rating",
-                                                tint = AccentAmber,
+                                                imageVector = Icons.Default.Chat,
+                                                contentDescription = "Chat",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        if (showChatDialog) {
+                                            WayGoChatDialog(
+                                                tripId = activeTrip!!.id,
+                                                currentRole = "PASSENGER",
+                                                currentUserId = "current_passenger",
+                                                currentUserName = profile?.name ?: "Fatou Joof",
+                                                viewModel = viewModel,
+                                                onDismiss = { 
+                                                    showChatDialog = false 
+                                                    viewModel.endChatSession()
+                                                }
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.width(6.dp))
+
+                                        // Interactive masked phone icon
+                                        var showMaskDialer by remember { mutableStateOf(false) }
+                                        IconButton(
+                                            onClick = { showMaskDialer = true },
+                                            modifier = Modifier
+                                                .background(BrandBluePrimary, CircleShape)
+                                                .size(40.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Phone,
+                                                contentDescription = "Call",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        if (showMaskDialer) {
+                                            AlertDialog(
+                                                onDismissRequest = { showMaskDialer = false },
+                                                title = { Text("Encrypted Call Masking", fontWeight = FontWeight.Bold) },
+                                                text = {
+                                                    Text(
+                                                        "Calling driver ${activeTrip!!.driverName} via secure WayGo central mask. Your personal phone is safe from third parties.\n\nSimulated Dial: +220 110-MASK-${activeTrip!!.driverId?.takeLast(4)}"
+                                                    )
+                                                },
+                                                confirmButton = {
+                                                    Button(onClick = { showMaskDialer = false }) { Text("Dial Number") }
+                                                },
+                                                dismissButton = {
+                                                    TextButton(onClick = { showMaskDialer = false }) { Text("Cancel") }
+                                                }
+                                            )
+                                        }
+                                    }
+                                    
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    
+                                    // Direct safety CTA row to prompt trust profiles
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { showDriverTrustProfile = true }
+                                            .background(PureWhite)
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Security,
+                                                contentDescription = "Safety Check",
+                                                tint = BrandBluePrimary,
                                                 modifier = Modifier.size(14.dp)
                                             )
                                             Text(
-                                                text = String.format("%.1f", matchedDriver?.rating ?: 4.8f),
-                                                fontSize = 12.sp,
-                                                color = BrandBlueDark,
-                                                fontWeight = FontWeight.Bold
+                                                text = "Tap to verify background check & GTA permit",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 11.sp,
+                                                color = BrandBluePrimary
                                             )
                                         }
-                                        
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        Icon(
+                                            imageVector = Icons.Default.ChevronRight,
+                                            contentDescription = "Go",
+                                            tint = BrandBluePrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                // Animated Searching State Container
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(BrandBlueLight.copy(alpha = 0.5f))
+                                        .border(1.dp, BrandBluePrimary.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
+                                        .padding(16.dp)
+                                        .testTag("searching_driver_container"),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    // Pulse Radar Visual
+                                    val infiniteTransition = rememberInfiniteTransition(label = "driver_radar_pulse")
+                                    val pulseScale by infiniteTransition.animateFloat(
+                                        initialValue = 0.85f,
+                                        targetValue = 1.35f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(1200, easing = LinearEasing),
+                                            repeatMode = RepeatMode.Reverse
+                                        ),
+                                        label = "pulse_scale"
+                                    )
+                                    val pulseAlpha by infiniteTransition.animateFloat(
+                                        initialValue = 0.7f,
+                                        targetValue = 0.15f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(1200, easing = LinearEasing),
+                                            repeatMode = RepeatMode.Reverse
+                                        ),
+                                        label = "pulse_alpha"
+                                    )
+
+                                    Box(
+                                        modifier = Modifier.size(100.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        // Outer pulsing ring
+                                        Box(
+                                            modifier = Modifier
+                                                .size((80 * pulseScale).dp)
+                                                .clip(CircleShape)
+                                                .background(BrandBluePrimary.copy(alpha = pulseAlpha))
+                                        )
+                                        // Secondary pulsing ring
+                                        Box(
+                                            modifier = Modifier
+                                                .size((64 * (pulseScale * 0.9f)).dp)
+                                                .clip(CircleShape)
+                                                .background(BrandBluePrimary.copy(alpha = (pulseAlpha + 0.2f).coerceAtMost(0.5f)))
+                                        )
+                                        // Center spinner container
+                                        Surface(
+                                            modifier = Modifier.size(54.dp),
+                                            shape = CircleShape,
+                                            color = PureWhite,
+                                            shadowElevation = 4.dp
                                         ) {
-                                            Text(
-                                                text = "${if (activeTrip!!.vehicleType == "CAR") "Yellow Sedan" else "Tricycle"} • ${activeTrip!!.vehiclePlate}",
-                                                fontSize = 12.sp,
-                                                color = NeutralGray
-                                            )
-                                            // Mini Verification pill badge
-                                            Box(
-                                                modifier = Modifier
-                                                    .clip(RoundedCornerShape(4.dp))
-                                                    .background(SuccessGreen.copy(alpha = 0.12f))
-                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            Box(contentAlignment = Alignment.Center) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(46.dp).testTag("searching_driver_loading_indicator"),
+                                                    color = BrandBluePrimary,
+                                                    strokeWidth = 3.dp
+                                                )
+                                                Icon(
+                                                    imageVector = if (activeTrip!!.vehicleType == "CAR") Icons.Default.DirectionsCar else Icons.Default.TwoWheeler,
+                                                    contentDescription = "Searching Vehicle",
+                                                    tint = BrandBluePrimary,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Text(
+                                        text = "Searching for Nearby Drivers...",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = BrandBlueDark
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Scanning 3.0 km radius around ${activeTrip!!.pickupName.split(",")[0]}",
+                                        fontSize = 12.sp,
+                                        color = NeutralGray,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+
+                                    Spacer(modifier = Modifier.height(14.dp))
+
+                                    // Real-time broadcast logs card
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = PureWhite),
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.12f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                modifier = Modifier.fillMaxWidth()
                                             ) {
+                                                Text(
+                                                    "Live Dispatch Radar Log:",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BrandBluePrimary
+                                                )
+                                                Text(
+                                                    "Pinging active units...",
+                                                    fontSize = 10.sp,
+                                                    color = NeutralGray
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            broadcastLogs.takeLast(3).forEach { log ->
                                                 Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.VerifiedUser,
-                                                        contentDescription = "Verified",
-                                                        tint = SuccessGreen,
-                                                        modifier = Modifier.size(10.dp)
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(6.dp)
+                                                            .clip(CircleShape)
+                                                            .background(AccentAmber)
                                                     )
+                                                    Spacer(modifier = Modifier.width(8.dp))
                                                     Text(
-                                                        text = "Verified",
-                                                        color = SuccessGreen,
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 9.sp
+                                                        text = log,
+                                                        fontSize = 11.sp,
+                                                        color = BrandBlueDark.copy(alpha = 0.9f)
                                                     )
                                                 }
                                             }
                                         }
                                     }
 
-                                    // Interactive messaging & chat
-                                    var showChatDialog by remember { mutableStateOf(false) }
-                                    IconButton(
-                                        onClick = { showChatDialog = true },
-                                        modifier = Modifier
-                                            .testTag("passenger_chat_launcher")
-                                            .background(BrandBlueSecondary, CircleShape)
-                                            .size(40.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Chat,
-                                            contentDescription = "Chat",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-
-                                    if (showChatDialog) {
-                                        WayGoChatDialog(
-                                            tripId = activeTrip!!.id,
-                                            currentRole = "PASSENGER",
-                                            currentUserId = "current_passenger",
-                                            currentUserName = profile?.name ?: "Fatou Joof",
-                                            viewModel = viewModel,
-                                            onDismiss = { 
-                                                showChatDialog = false 
-                                                viewModel.endChatSession()
-                                            }
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.width(6.dp))
-
-                                    // Interactive masked phone icon
-                                    var showMaskDialer by remember { mutableStateOf(false) }
-                                    IconButton(
-                                        onClick = { showMaskDialer = true },
-                                        modifier = Modifier
-                                            .background(BrandBluePrimary, CircleShape)
-                                            .size(40.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Phone,
-                                            contentDescription = "Call",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    }
-
-                                    if (showMaskDialer) {
-                                        AlertDialog(
-                                            onDismissRequest = { showMaskDialer = false },
-                                            title = { Text("Encrypted Call Masking", fontWeight = FontWeight.Bold) },
-                                            text = {
-                                                Text(
-                                                    "Calling driver ${activeTrip!!.driverName} via secure WayGo central mask. Your personal phone is safe from third parties.\n\nSimulated Dial: +220 110-MASK-${activeTrip!!.driverId?.takeLast(4)}"
-                                                )
-                                            },
-                                            confirmButton = {
-                                                Button(onClick = { showMaskDialer = false }) { Text("Dial Number") }
-                                            },
-                                            dismissButton = {
-                                                TextButton(onClick = { showMaskDialer = false }) { Text("Cancel") }
-                                            }
-                                        )
-                                    }
-                                }
-                                
-                                Spacer(modifier = Modifier.height(10.dp))
-                                
-                                // Direct safety CTA row to prompt trust profiles
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { showDriverTrustProfile = true }
-                                        .background(PureWhite)
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Security,
-                                            contentDescription = "Safety Check",
-                                            tint = BrandBluePrimary,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Text(
-                                            text = "Tap to verify background check & GTA permit",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp,
-                                            color = BrandBluePrimary
-                                        )
-                                    }
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = "Go",
-                                        tint = BrandBluePrimary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                        } else {
-                            // High fidelity Broadcast feedback panel
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(BrandBlueLight.copy(alpha = 0.4f))
-                                    .padding(12.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    CircularProgressIndicator(
-                                        color = BrandBluePrimary,
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "Broadcasting Request to Nearest Responders",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = BrandBlueDark
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                // Show broadcast/search logs
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = PureWhite),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.1f))
-                                ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
-                                        Text(
-                                            "Broadcast Activity Timeline:",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = NeutralGray,
-                                            modifier = Modifier.padding(bottom = 4.dp)
-                                        )
-
-                                        broadcastLogs.takeLast(4).forEach { log ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(5.dp)
-                                                        .clip(CircleShape)
-                                                        .background(BrandBlueSecondary)
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = log,
-                                                    fontSize = 10.5.sp,
-                                                    color = BrandBlueDark.copy(alpha = 0.9f)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (broadcastDrivers.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        "Nearest drivers in range:",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = NeutralGray,
-                                        modifier = Modifier.padding(bottom = 4.dp)
-                                    )
-
-                                    broadcastDrivers.forEach { (driver, dist) ->
+                                    if (broadcastDrivers.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(10.dp))
                                         Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 2.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(PureWhite)
-                                                .clickable { selectedDriverForProfile = driver }
-                                                .padding(10.dp)
-                                                .testTag("nearest_driver_item_${driver.id}"),
+                                            modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Icon(
-                                                    imageVector = if (driver.vehicleType == "CAR") Icons.Default.DirectionsCar else Icons.Default.TwoWheeler,
-                                                    contentDescription = "vehicle",
-                                                    tint = BrandBluePrimary,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = "${driver.name} (★${driver.rating})",
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = BrandBlueDark
-                                                )
-                                            }
                                             Text(
-                                                text = "${String.format("%.2f", dist)} km • Profile",
+                                                "Active drivers in dispatch range (${broadcastDrivers.size}):",
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = SuccessGreen
+                                                color = NeutralGray
                                             )
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        broadcastDrivers.forEach { (driver, dist) ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 2.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(PureWhite)
+                                                    .clickable { selectedDriverForProfile = driver }
+                                                    .padding(8.dp)
+                                                    .testTag("nearest_driver_item_${driver.id}"),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        imageVector = if (driver.vehicleType == "CAR") Icons.Default.DirectionsCar else Icons.Default.TwoWheeler,
+                                                        contentDescription = "vehicle",
+                                                        tint = BrandBluePrimary,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = "${driver.name} (★${driver.rating})",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = BrandBlueDark
+                                                    )
+                                                }
+                                                Text(
+                                                    text = "${String.format("%.2f", dist)} km • Tap Profile",
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = SuccessGreen
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -7359,3 +7667,52 @@ data class AccountInboxItem(
     val category: String,
     val isRead: Boolean
 )
+
+@Composable
+private fun StatusStepItem(
+    stepNumber: String,
+    label: String,
+    isActive: Boolean,
+    isCurrent: Boolean,
+    activeColor: Color,
+    testTag: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.testTag(testTag),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp)
+                .clip(CircleShape)
+                .background(if (isActive) activeColor else Color.LightGray.copy(alpha = 0.35f)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isActive && !isCurrent) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(13.dp)
+                )
+            } else {
+                Text(
+                    text = stepNumber,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    color = if (isActive) Color.White else NeutralGray
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = label,
+            fontSize = 9.5.sp,
+            fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Medium,
+            color = if (isActive) BrandBlueDark else NeutralGray,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+    }
+}

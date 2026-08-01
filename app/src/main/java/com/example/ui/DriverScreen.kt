@@ -3537,38 +3537,7 @@ fun DriverAuthView(
                     )
                 }
 
-                if (!isDriverRegisterMode) {
-                    Spacer(modifier = Modifier.height(14.dp))
 
-                    Text(
-                        text = "Quick Select Fleet Driver:",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isDark) Color(0xFF94A3B8) else NeutralGray
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            Triple("driver.alieu@waygo.com", "Alieu Jallow (Mercedes Sedan)", "driver123"),
-                            Triple("driver.fatou@waygo.com", "Fatou Jallow (Toyota Rav4)", "driver123"),
-                            Triple("driver.modou@waygo.com", "Modou Touray (Nissan Van)", "driver123")
-                        ).forEach { (drvEmail, label, drvPass) ->
-                            AssistChip(
-                                onClick = { onQuickDriverSelect(drvEmail, drvPass) },
-                                label = { Text("🚗 $label", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = if (isDark) Color(0xFF334155) else BrandBlueLight,
-                                    labelColor = if (isDark) PureWhite else BrandBlueDark
-                                ),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
 
                 val errToDisplay = if (isDriverRegisterMode && localError.isNotBlank()) localError else authError
                 if (errToDisplay.isNotEmpty()) {
