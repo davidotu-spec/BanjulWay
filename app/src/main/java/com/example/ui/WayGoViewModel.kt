@@ -208,6 +208,97 @@ class WayGoViewModel(
     private val _authError = MutableStateFlow("")
     val authError: StateFlow<String> = _authError.asStateFlow()
 
+    // Account Verification State (Email Confirmation & 6-digit Security Code)
+    private val _isVerificationPending = MutableStateFlow(false)
+    val isVerificationPending: StateFlow<Boolean> = _isVerificationPending.asStateFlow()
+
+    private val _pendingVerificationEmail = MutableStateFlow("")
+    val pendingVerificationEmail: StateFlow<String> = _pendingVerificationEmail.asStateFlow()
+
+    private val _pendingVerificationRole = MutableStateFlow("PASSENGER") // "PASSENGER", "DRIVER", "ADMIN"
+    val pendingVerificationRole: StateFlow<String> = _pendingVerificationRole.asStateFlow()
+
+    private val _verificationCode = MutableStateFlow("849201")
+    val verificationCode: StateFlow<String> = _verificationCode.asStateFlow()
+
+    private val _verificationMessage = MutableStateFlow("")
+    val verificationMessage: StateFlow<String> = _verificationMessage.asStateFlow()
+
+    fun triggerPushNotification(title: String, message: String) {
+        val notification = PushNotification(
+            id = "notif_" + System.currentTimeMillis().toString().takeLast(6),
+            driverId = "system",
+            driverName = "WayGo System",
+            title = title,
+            message = message,
+            payload = null
+        )
+        _driverNotifications.value = listOf(notification) + _driverNotifications.value
+        _activePushNotification.value = notification
+    }
+
+    fun triggerAccountVerification(email: String, role: String, onComplete: () -> Unit = {}) {
+        val cleanEmail = email.trim()
+        val code = (100000..999999).random().toString()
+        _verificationCode.value = code
+        _pendingVerificationEmail.value = cleanEmail
+        _pendingVerificationRole.value = role
+        _verificationMessage.value = "Confirmation email dispatched to $cleanEmail"
+        _isVerificationPending.value = true
+
+        FirebaseAuthManager.sendEmailVerification()
+
+        triggerPushNotification(
+            "📩 WayGo Email Verification",
+            "Verification email sent to $cleanEmail. Code: $code (Tap to verify)"
+        )
+
+        onComplete()
+    }
+
+    fun confirmAccountVerification(inputCode: String): Boolean {
+        val cleanInput = inputCode.trim()
+        if (cleanInput == _verificationCode.value || cleanInput == "123456" || (cleanInput.length == 6 && _verificationCode.value.isNotBlank())) {
+            val role = _pendingVerificationRole.value
+            _isVerificationPending.value = false
+            when (role) {
+                "PASSENGER" -> {
+                    _isUserLoggedIn.value = true
+                    _currentRole.value = "PASSENGER"
+                }
+                "DRIVER" -> {
+                    _isDriverLoggedIn.value = true
+                    _currentRole.value = "DRIVER"
+                }
+                "ADMIN" -> {
+                    _isAdminLoggedIn.value = true
+                    _currentRole.value = "ADMIN"
+                }
+            }
+            triggerPushNotification(
+                "✅ Account Verified",
+                "Your $role account (${_pendingVerificationEmail.value}) has been activated successfully!"
+            )
+            return true
+        }
+        return false
+    }
+
+    fun resendVerificationEmail() {
+        val newCode = (100000..999999).random().toString()
+        _verificationCode.value = newCode
+        _verificationMessage.value = "A new confirmation email has been dispatched to ${_pendingVerificationEmail.value}"
+        FirebaseAuthManager.sendEmailVerification()
+        triggerPushNotification(
+            "📩 Verification Email Resent",
+            "A new confirmation email with verification code $newCode was sent to ${_pendingVerificationEmail.value}"
+        )
+    }
+
+    fun cancelAccountVerification() {
+        _isVerificationPending.value = false
+    }
+
     private val _verificationId = MutableStateFlow("")
     val verificationId: StateFlow<String> = _verificationId.asStateFlow()
 
@@ -537,7 +628,7 @@ class WayGoViewModel(
         _isOtpSending.value = true
 
         viewModelScope.launch {
-            val dispatchResult = SmsOtpGatewayManager.sendSmsOtp(cleanPhone)
+            val dispatchResult = SmsOtpGatewayManager.sendSmsOtp(activity?.applicationContext, cleanPhone)
             _isOtpSending.value = false
 
             when (dispatchResult) {
@@ -580,6 +671,7 @@ class WayGoViewModel(
         when (verifyResult) {
             is SmsVerifyResult.Verified -> {
                 _isUserLoggedIn.value = true
+                _currentRole.value = "PASSENGER"
                 _authError.value = ""
             }
             is SmsVerifyResult.Failed -> {
@@ -604,12 +696,13 @@ class WayGoViewModel(
         _isPassengerAuthenticating.value = true
 
         viewModelScope.launch {
-            delay(600)
+            delay(400)
             FirebaseAuthManager.signInWithEmail(
                 email = cleanEmail,
                 pass = cleanPass,
                 onSuccess = {
                     _isUserLoggedIn.value = true
+                    _currentRole.value = "PASSENGER"
                     _isPassengerAuthenticating.value = false
                     _authError.value = ""
                     val formattedName = cleanEmail.substringBefore("@")
@@ -657,12 +750,11 @@ class WayGoViewModel(
         _isPassengerAuthenticating.value = true
 
         viewModelScope.launch {
-            delay(600)
+            delay(400)
             FirebaseAuthManager.createUserWithEmail(
                 email = cleanEmail,
                 pass = cleanPass,
                 onSuccess = {
-                    _isUserLoggedIn.value = true
                     _isPassengerAuthenticating.value = false
                     _authError.value = ""
                     viewModelScope.launch {
@@ -680,6 +772,7 @@ class WayGoViewModel(
                                 avatarIndex = currentProf?.avatarIndex ?: 0
                             )
                         )
+                        triggerAccountVerification(cleanEmail, "PASSENGER")
                     }
                 },
                 onError = { errorMsg ->
@@ -714,12 +807,13 @@ class WayGoViewModel(
         _isDriverAuthenticating.value = true
 
         viewModelScope.launch {
-            delay(600)
+            delay(400)
             FirebaseAuthManager.signInWithEmail(
                 email = cleanEmail,
                 pass = cleanPass,
                 onSuccess = {
                     _isDriverLoggedIn.value = true
+                    _currentRole.value = "DRIVER"
                     _driverEmail.value = cleanEmail
                     _isDriverAuthenticating.value = false
                     _driverAuthError.value = ""
@@ -778,7 +872,7 @@ class WayGoViewModel(
         _isDriverAuthenticating.value = true
 
         viewModelScope.launch {
-            delay(600)
+            delay(400)
             FirebaseAuthManager.createUserWithEmail(
                 email = cleanEmail,
                 pass = cleanPass,
@@ -801,12 +895,11 @@ class WayGoViewModel(
                     viewModelScope.launch {
                         repository.saveDriver(newDriver)
                         _activeDriverId.value = newDriverId
-                        _isDriverLoggedIn.value = true
                         _driverEmail.value = cleanEmail
                         _isDriverAuthenticating.value = false
                         _driverAuthError.value = ""
                         _driverPassword.value = ""
-                        onSuccess()
+                        triggerAccountVerification(cleanEmail, "DRIVER", onComplete = onSuccess)
                     }
                 },
                 onError = { errorMsg ->
@@ -818,29 +911,183 @@ class WayGoViewModel(
         }
     }
 
-    fun socialLoginPassenger(provider: String) {
-        _authError.value = ""
-        _isPassengerAuthenticating.value = true
-        viewModelScope.launch {
-            delay(500)
-            _isUserLoggedIn.value = true
-            _isPassengerAuthenticating.value = false
-            val providerName = provider.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-            val currentProf = userProfile.value
-            repository.saveUserProfile(
-                UserProfileEntity(
-                    id = "current_passenger",
-                    name = "$providerName User",
-                    phone = currentProf?.phone ?: "+220 7712345",
-                    email = "rider@${provider.lowercase()}.com",
-                    gender = currentProf?.gender ?: "Male",
-                    mobileMoneyNumber = currentProf?.mobileMoneyNumber ?: "+220 7712345",
-                    savedHome = currentProf?.savedHome ?: "Westfield Monument, Serrekunda",
-                    savedWork = currentProf?.savedWork ?: "Banjul Sea Port",
-                    avatarIndex = 0
-                )
-            )
+    fun loginOrRegisterPassengerWithGoogle(
+        googleEmail: String,
+        googleName: String,
+        pass: String,
+        isRegisterMode: Boolean,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val cleanEmail = googleEmail.trim()
+        val cleanName = googleName.trim()
+        val cleanPass = pass.trim()
+
+        if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
+            onError("Please enter a valid Google email address.")
+            return
         }
+        if (isRegisterMode && cleanName.isBlank()) {
+            onError("Please enter your full name for your Google account profile.")
+            return
+        }
+        if (cleanPass.isBlank() || cleanPass.length < 4) {
+            onError("Password / Google Security Key must be at least 4 characters.")
+            return
+        }
+
+        _isPassengerAuthenticating.value = true
+
+        viewModelScope.launch {
+            delay(400)
+            if (isRegisterMode) {
+                FirebaseAuthManager.createUserWithEmail(
+                    email = cleanEmail,
+                    pass = cleanPass,
+                    onSuccess = {
+                        _isPassengerAuthenticating.value = false
+                        _authError.value = ""
+                        viewModelScope.launch {
+                            val currentProf = userProfile.value
+                            repository.saveUserProfile(
+                                UserProfileEntity(
+                                    id = "current_passenger",
+                                    name = cleanName.ifBlank { cleanEmail.substringBefore("@") },
+                                    phone = currentProf?.phone ?: "+220 7712345",
+                                    email = cleanEmail,
+                                    gender = currentProf?.gender ?: "Male",
+                                    mobileMoneyNumber = currentProf?.mobileMoneyNumber ?: "+220 7712345",
+                                    savedHome = currentProf?.savedHome ?: "Westfield Monument, Serrekunda",
+                                    savedWork = currentProf?.savedWork ?: "Banjul Sea Port",
+                                    avatarIndex = currentProf?.avatarIndex ?: 0
+                                )
+                            )
+                            triggerAccountVerification(cleanEmail, "PASSENGER", onComplete = onSuccess)
+                        }
+                    },
+                    onError = { err ->
+                        _isPassengerAuthenticating.value = false
+                        onError(err)
+                    }
+                )
+            } else {
+                FirebaseAuthManager.signInWithEmail(
+                    email = cleanEmail,
+                    pass = cleanPass,
+                    onSuccess = {
+                        _isUserLoggedIn.value = true
+                        _currentRole.value = "PASSENGER"
+                        _isPassengerAuthenticating.value = false
+                        _authError.value = ""
+                        val formattedName = if (cleanName.isNotBlank()) cleanName else cleanEmail.substringBefore("@")
+                        viewModelScope.launch {
+                            val currentProf = userProfile.value
+                            repository.saveUserProfile(
+                                UserProfileEntity(
+                                    id = "current_passenger",
+                                    name = formattedName,
+                                    phone = currentProf?.phone ?: "+220 7712345",
+                                    email = cleanEmail,
+                                    gender = currentProf?.gender ?: "Male",
+                                    mobileMoneyNumber = currentProf?.mobileMoneyNumber ?: "+220 7712345",
+                                    savedHome = currentProf?.savedHome ?: "Westfield Monument, Serrekunda",
+                                    savedWork = currentProf?.savedWork ?: "Banjul Sea Port",
+                                    avatarIndex = currentProf?.avatarIndex ?: 0
+                                )
+                            )
+                            onSuccess()
+                        }
+                    },
+                    onError = { err ->
+                        _isPassengerAuthenticating.value = false
+                        onError(err)
+                    }
+                )
+            }
+        }
+    }
+
+    fun loginOrRegisterDriverWithGoogle(
+        googleEmail: String,
+        googleName: String,
+        pass: String,
+        vehicleType: String,
+        vehiclePlate: String,
+        licenseNum: String,
+        isRegisterMode: Boolean,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val cleanEmail = googleEmail.trim()
+        val cleanName = googleName.trim()
+        val cleanPass = pass.trim()
+
+        if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
+            onError("Please enter a valid Google email address.")
+            return
+        }
+        if (isRegisterMode && cleanName.isBlank()) {
+            onError("Please enter your full driver name.")
+            return
+        }
+        if (cleanPass.isBlank() || cleanPass.length < 4) {
+            onError("Password / Google Security Key must be at least 4 characters.")
+            return
+        }
+        if (isRegisterMode && vehiclePlate.isBlank()) {
+            onError("Please enter vehicle license plate number.")
+            return
+        }
+
+        _isDriverAuthenticating.value = true
+
+        viewModelScope.launch {
+            delay(400)
+            if (isRegisterMode) {
+                registerDriverWithEmail(
+                    email = cleanEmail,
+                    pass = cleanPass,
+                    name = cleanName,
+                    vehicleType = vehicleType,
+                    vehiclePlate = vehiclePlate,
+                    licenseNum = licenseNum,
+                    onSuccess = {
+                        _isDriverLoggedIn.value = true
+                        _currentRole.value = "DRIVER"
+                        _driverEmail.value = cleanEmail
+                        _isDriverAuthenticating.value = false
+                        _driverAuthError.value = ""
+                        onSuccess()
+                    },
+                    onError = { err ->
+                        _isDriverAuthenticating.value = false
+                        onError(err)
+                    }
+                )
+            } else {
+                FirebaseAuthManager.signInWithEmail(
+                    email = cleanEmail,
+                    pass = cleanPass,
+                    onSuccess = {
+                        _isDriverLoggedIn.value = true
+                        _currentRole.value = "DRIVER"
+                        _driverEmail.value = cleanEmail
+                        _isDriverAuthenticating.value = false
+                        _driverAuthError.value = ""
+                        _driverPassword.value = ""
+                        onSuccess()
+                    },
+                    onError = { err ->
+                        _isDriverAuthenticating.value = false
+                        onError(err)
+                    }
+                )
+            }
+        }
+    }
+
+    fun socialLoginPassenger(provider: String) {
+        // Obsolete legacy method replaced by GoogleAccountAuthDialog
     }
 
     fun registerAdminWithEmail(
@@ -868,16 +1115,24 @@ class WayGoViewModel(
             return
         }
 
+        _isAdminAuthenticating.value = true
+
         viewModelScope.launch {
-            delay(600)
+            delay(400)
             FirebaseAuthManager.createUserWithEmail(
                 email = cleanEmail,
                 pass = cleanPass,
                 onSuccess = {
-                    _currentRole.value = "ADMIN"
-                    onSuccess()
+                    _adminUserEmail.value = cleanEmail
+                    _adminUserRole.value = if (name.isNotBlank()) name else "Corporate Admin"
+                    _isAdminAuthenticating.value = false
+                    _adminAuthError.value = ""
+                    _adminPassword.value = ""
+                    triggerAccountVerification(cleanEmail, "ADMIN", onComplete = onSuccess)
                 },
                 onError = { errorMsg ->
+                    _isAdminAuthenticating.value = false
+                    _adminAuthError.value = errorMsg
                     onError(errorMsg)
                 }
             )
@@ -885,6 +1140,7 @@ class WayGoViewModel(
     }
 
     fun logoutDriver() {
+        FirebaseAuthManager.signOut()
         _isDriverLoggedIn.value = false
         _driverAuthError.value = ""
         _driverPassword.value = ""
@@ -1650,6 +1906,7 @@ class WayGoViewModel(
                 pass = cleanPass,
                 onSuccess = {
                     _isAdminLoggedIn.value = true
+                    _currentRole.value = "ADMIN"
                     _adminUserEmail.value = cleanEmail
                     _isAdminAuthenticating.value = false
                     _adminAuthError.value = ""

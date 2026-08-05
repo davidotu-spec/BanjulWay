@@ -59,6 +59,17 @@ fun AdminScreen(
     val activity = context as? android.app.Activity
 
     var activeAdminTab by remember { mutableStateOf("METRICS") } // "METRICS", "DRIVERS", "SUPPORT", "SCHEDULED"
+    var showSignOutModal by remember { mutableStateOf(false) }
+
+    if (showSignOutModal) {
+        SignOutConfirmationDialog(
+            userRole = "Administrator",
+            userEmail = adminUserEmail.ifBlank { "admin@waygo.gm" },
+            isDark = false,
+            onDismiss = { showSignOutModal = false },
+            onConfirmSignOut = { viewModel.logoutAdmin() }
+        )
+    }
 
     // If Admin is not logged in via Email, display the Enterprise Admin Email Login Gate
     if (!isAdminLoggedIn) {
@@ -164,7 +175,7 @@ fun AdminScreen(
                 },
                 actions = {
                     AssistChip(
-                        onClick = { viewModel.logoutAdmin() },
+                        onClick = { showSignOutModal = true },
                         label = { Text("Sign Out", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                         leadingIcon = {
                             Icon(Icons.Default.Logout, contentDescription = "Sign Out Admin", modifier = Modifier.size(14.dp))

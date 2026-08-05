@@ -95,6 +95,19 @@ fun DriverScreen(
                     onError = onError
                 )
             },
+            onGoogleDriverAuth = { email, name, pass, vehicleType, vehiclePlate, licenseNum, isRegisterMode, onError ->
+                viewModel.loginOrRegisterDriverWithGoogle(
+                    googleEmail = email,
+                    googleName = name,
+                    pass = pass,
+                    vehicleType = vehicleType,
+                    vehiclePlate = vehiclePlate,
+                    licenseNum = licenseNum,
+                    isRegisterMode = isRegisterMode,
+                    onSuccess = { },
+                    onError = onError
+                )
+            },
             onSelectRole = { role -> viewModel.setRole(role) },
             isDark = isDark
         )
@@ -111,6 +124,17 @@ fun DriverScreen(
 
     var showOnboardingForm by remember { mutableStateOf(false) }
     var showRequestPayoutDialog by remember { mutableStateOf(false) }
+    var showSignOutModal by remember { mutableStateOf(false) }
+
+    if (showSignOutModal) {
+        SignOutConfirmationDialog(
+            userRole = "Driver",
+            userEmail = drivers.firstOrNull { it.id == activeDriverId }?.name ?: "driver@waygo.gm",
+            isDark = isDark,
+            onDismiss = { showSignOutModal = false },
+            onConfirmSignOut = { viewModel.logoutDriver() }
+        )
+    }
 
     // Dynamic system battery observation with tester simulator override state
     val (systemBatteryLevel, systemIsCharging) = rememberBatteryState()
@@ -294,7 +318,7 @@ fun DriverScreen(
                     }
 
                     IconButton(
-                        onClick = { viewModel.logoutDriver() },
+                        onClick = { showSignOutModal = true },
                         modifier = Modifier.testTag("driver_topbar_logout_btn")
                     ) {
                         Icon(
@@ -2103,6 +2127,14 @@ fun DriverScreen(
 
                                 Spacer(modifier = Modifier.height(10.dp))
 
+                                // Ride status visual progress step indicator
+                                RideStatusStepIndicator(
+                                    currentStatus = activeExecution.status,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
                                 Row(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -3280,6 +3312,7 @@ fun DriverAuthView(
     onLoginSubmit: () -> Unit,
     onQuickDriverSelect: (String, String) -> Unit,
     onRegisterSubmit: (email: String, pass: String, name: String, vehicleType: String, vehiclePlate: String, licenseNum: String, onError: (String) -> Unit) -> Unit = { _, _, _, _, _, _, _ -> },
+    onGoogleDriverAuth: (email: String, name: String, pass: String, vehicleType: String, vehiclePlate: String, licenseNum: String, isRegister: Boolean, onError: (String) -> Unit) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onSelectRole: (String) -> Unit = {},
     isDark: Boolean
 ) {
@@ -3290,6 +3323,18 @@ fun DriverAuthView(
     var vehiclePlateInput by remember { mutableStateOf("BJL 8844 X") }
     var licenseNumInput by remember { mutableStateOf("GAM-DL-9082") }
     var localError by remember { mutableStateOf("") }
+    var showGoogleAuthDialog by remember { mutableStateOf(false) }
+
+    if (showGoogleAuthDialog) {
+        GoogleAccountAuthDialog(
+            userRole = "DRIVER",
+            isDark = isDark,
+            onDismiss = { showGoogleAuthDialog = false },
+            onAuthenticate = { gEmail, gName, gPass, vType, vPlate, lNum, isReg, onError ->
+                onGoogleDriverAuth(gEmail, gName, gPass, vType, vPlate, lNum, isReg, onError)
+            }
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -3586,6 +3631,29 @@ fun DriverAuthView(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(if (isDriverRegisterMode) "Submit Application & Sign In" else "Sign In to Driver Portal", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HorizontalDivider(modifier = Modifier.weight(1f), color = if (isDark) Color(0xFF334155) else NeutralGray.copy(alpha = 0.3f))
+                    Text("  OR  ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NeutralGray)
+                    HorizontalDivider(modifier = Modifier.weight(1f), color = if (isDark) Color(0xFF334155) else NeutralGray.copy(alpha = 0.3f))
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+
+                OutlinedButton(
+                    onClick = { showGoogleAuthDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("driver_google_auth_btn"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isDark) PureWhite else BrandBlueDark)
+                ) {
+                    Text("🌐 Continue with Google Account", fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

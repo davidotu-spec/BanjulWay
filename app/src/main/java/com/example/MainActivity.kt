@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.AccountVerificationDialog
 import com.example.ui.AdminScreen
 import com.example.ui.WayGoViewModel
 import com.example.ui.WayGoViewModelFactory
@@ -88,6 +89,30 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
                 viewModel.dismissActivePushNotification()
             }
         }
+    }
+
+    val isVerificationPending by viewModel.isVerificationPending.collectAsState()
+    val pendingVerificationEmail by viewModel.pendingVerificationEmail.collectAsState()
+    val pendingVerificationRole by viewModel.pendingVerificationRole.collectAsState()
+    val verificationCode by viewModel.verificationCode.collectAsState()
+    val verificationMessage by viewModel.verificationMessage.collectAsState()
+
+    if (isVerificationPending) {
+        AccountVerificationDialog(
+            userEmail = pendingVerificationEmail,
+            userRole = pendingVerificationRole,
+            generatedCode = verificationCode,
+            verificationMessage = verificationMessage,
+            onVerifyCode = { code ->
+                viewModel.confirmAccountVerification(code)
+            },
+            onResendEmail = {
+                viewModel.resendVerificationEmail()
+            },
+            onDismiss = {
+                viewModel.cancelAccountVerification()
+            }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

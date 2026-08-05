@@ -113,6 +113,17 @@ fun PassengerScreen(
     val profile = profileFlow.value
 
     var activeTabSubState by remember { mutableStateOf("HOME") } // "HOME", "HISTORY", "PROFILE", "CHAT"
+    var showSignOutModal by remember { mutableStateOf(false) }
+
+    if (showSignOutModal) {
+        SignOutConfirmationDialog(
+            userRole = "Passenger",
+            userEmail = profile?.email ?: "rider@waygo.gm",
+            isDark = false,
+            onDismiss = { showSignOutModal = false },
+            onConfirmSignOut = { viewModel.logout() }
+        )
+    }
 
     val smsGatewayStatus by viewModel.smsGatewayStatus.collectAsState()
     val isRealSmsSent by viewModel.isRealSmsSent.collectAsState()
@@ -136,6 +147,9 @@ fun PassengerScreen(
             onEmailLogin = { email, pass -> viewModel.loginPassengerWithEmail(email, pass) },
             onEmailRegister = { email, pass, name -> viewModel.registerPassengerWithEmail(email, pass, name) },
             onSocialLogin = { provider -> viewModel.socialLoginPassenger(provider) },
+            onGoogleAuth = { email, name, pass, isRegister, onError ->
+                viewModel.loginOrRegisterPassengerWithGoogle(email, name, pass, isRegister, onSuccess = {}, onError = onError)
+            },
             onSelectRole = { newRole -> viewModel.setRole(newRole) },
             isAdminLoggedIn = isAdminLoggedIn,
             isSecretAdminUnlocked = isSecretAdminUnlocked,
@@ -223,6 +237,17 @@ fun PassengerScreen(
                             modifier = Modifier.size(28.dp)
                         )
                     }
+                    IconButton(
+                        onClick = { showSignOutModal = true },
+                        modifier = Modifier.testTag("passenger_topbar_logout_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Logout,
+                            contentDescription = "Sign Out",
+                            tint = ErrorRed,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             )
         },
@@ -290,9 +315,9 @@ fun PassengerScreen(
         ) {
             when (activeTabSubState) {
                 "HOME" -> HomeScreenContent(viewModel, profile)
-                "HISTORY" -> ProfileScreenContent(viewModel, profile, initialSection = "TRIP_LOG") { activeTabSubState = "HOME" }
-                "PROFILE" -> ProfileScreenContent(viewModel, profile, initialSection = "PROFILE") { activeTabSubState = "HOME" }
-                "CHAT" -> ProfileScreenContent(viewModel, profile, initialSection = "INBOX") { activeTabSubState = "HOME" }
+                "HISTORY" -> ProfileScreenContent(viewModel, profile, initialSection = "TRIP_LOG", onSignOutClick = { showSignOutModal = true }) { activeTabSubState = "HOME" }
+                "PROFILE" -> ProfileScreenContent(viewModel, profile, initialSection = "PROFILE", onSignOutClick = { showSignOutModal = true }) { activeTabSubState = "HOME" }
+                "CHAT" -> ProfileScreenContent(viewModel, profile, initialSection = "INBOX", onSignOutClick = { showSignOutModal = true }) { activeTabSubState = "HOME" }
             }
 
             // Emergency Dialog
@@ -473,6 +498,7 @@ fun PassengerAuthView(
     onEmailLogin: (String, String) -> Unit = { _, _ -> },
     onEmailRegister: (String, String, String) -> Unit = { _, _, _ -> },
     onSocialLogin: (String) -> Unit = {},
+    onGoogleAuth: (email: String, name: String, pass: String, isRegister: Boolean, onError: (String) -> Unit) -> Unit = { _, _, _, _, _ -> },
     onSelectRole: (String) -> Unit = {},
     isAdminLoggedIn: Boolean = false,
     isSecretAdminUnlocked: Boolean = false,
@@ -482,6 +508,18 @@ fun PassengerAuthView(
     var secretPasskeyInput by remember { mutableStateOf("") }
     var secretPasskeyError by remember { mutableStateOf("") }
     var secretUnlockBannerMsg by remember { mutableStateOf("") }
+    var showGoogleAuthDialog by remember { mutableStateOf(false) }
+
+    if (showGoogleAuthDialog) {
+        GoogleAccountAuthDialog(
+            userRole = "PASSENGER",
+            isDark = false,
+            onDismiss = { showGoogleAuthDialog = false },
+            onAuthenticate = { gEmail, gName, gPass, _, _, _, isReg, onError ->
+                onGoogleAuth(gEmail, gName, gPass, isReg, onError)
+            }
+        )
+    }
 
     val countries = remember {
         listOf(
@@ -849,7 +887,7 @@ fun PassengerAuthView(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     OutlinedButton(
-                                        onClick = { onSocialLogin("Google") },
+                                        onClick = { showGoogleAuthDialog = true },
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(12.dp),
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = BrandBlueDark)
@@ -1235,29 +1273,26 @@ fun PassengerAuthView(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (isRealSmsSent)
-                                "📱 Live SMS dispatched to ${selectedCountry.code} $phoneInput via WayGo SMS Gateway!"
-                            else
-                                "A secure verification code has been dispatched to ${selectedCountry.code} $phoneInput",
+                            text = "A 6-digit verification code has been dispatched via SMS to ${selectedCountry.code} $phoneInput",
                             fontSize = 13.sp,
-                            color = if (isRealSmsSent) SuccessGreen else NeutralGray,
-                            fontWeight = if (isRealSmsSent) FontWeight.Bold else FontWeight.Normal,
+                            color = BrandBlueDark,
+                            fontWeight = FontWeight.Normal,
                             textAlign = TextAlign.Center
                         )
 
                         Spacer(modifier = Modifier.height(18.dp))
 
-                        // Interactive SMS Notification Panel
+                        // Real SMS Notification Status Panel
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp)),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isRealSmsSent) SuccessGreen.copy(alpha = 0.15f) else BrandBlueLight.copy(alpha = 0.95f)
+                                containerColor = SuccessGreen.copy(alpha = 0.12f)
                             ),
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = if (isRealSmsSent) SuccessGreen else BrandBluePrimary.copy(alpha = 0.1f)
+                                color = SuccessGreen.copy(alpha = 0.3f)
                             )
                         ) {
                             Row(
@@ -1270,7 +1305,7 @@ fun PassengerAuthView(
                                     modifier = Modifier
                                         .size(36.dp)
                                         .clip(CircleShape)
-                                        .background(if (isRealSmsSent) SuccessGreen else BrandBlueSecondary),
+                                        .background(SuccessGreen),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -1288,52 +1323,47 @@ fun PassengerAuthView(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "WayGo SMS Gateway",
+                                            text = "SMS Dispatch Status",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
                                             color = BrandBlueDark
                                         )
                                         Text(
-                                            text = "Just Now",
+                                            text = "Sent",
                                             fontSize = 9.sp,
-                                            color = NeutralGray
+                                            fontWeight = FontWeight.Bold,
+                                            color = SuccessGreen
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (isRealSmsSent)
-                                            "SMS delivered to phone. Security code: $generatedOtp"
-                                        else
-                                            "Your login code is $generatedOtp. Valid for 5 minutes.",
+                                        text = "SMS delivered to mobile number ${selectedCountry.code} $phoneInput. Please check your SMS inbox.",
                                         fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
+                                        fontWeight = FontWeight.Medium,
                                         color = BrandBluePrimary
                                     )
                                 }
                             }
-                            // Tap to autofill button inside SMS message
+                            // SMS Status Footer Banner
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .background(BrandBluePrimary.copy(alpha = 0.05f))
-                                    .clickable {
-                                        otpInput = generatedOtp
-                                    }
                                     .padding(vertical = 8.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Default.FlashOn,
-                                        contentDescription = "Autofill action",
-                                        tint = AccentAmber,
+                                        imageVector = Icons.Default.Sms,
+                                        contentDescription = "SMS Status",
+                                        tint = SuccessGreen,
                                         modifier = Modifier.size(14.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Tap to Autofill OTP Code ($generatedOtp)",
+                                        text = "Check your phone's SMS text messages for your verification code",
                                         fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = BrandBluePrimary
                                     )
                                 }
@@ -3004,12 +3034,10 @@ fun HomeScreenContent(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Linear progress visual
-                        LinearProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
-                            color = SuccessGreen,
-                            trackColor = BrandBlueLight
+                        // Visual progress bar and 4-step indicator during active ride
+                        RideStatusStepIndicator(
+                            currentStatus = activeTrip!!.status,
+                            modifier = Modifier.padding(vertical = 4.dp)
                         )
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -3183,59 +3211,11 @@ fun HomeScreenContent(
                                                 modifier = Modifier.padding(start = 24.dp, bottom = 8.dp)
                                             )
 
-                                            // 3-Step Visual Progress Tracker
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                // Step 1: En Route
-                                                StatusStepItem(
-                                                    stepNumber = "1",
-                                                    label = "Driver En Route",
-                                                    isActive = stepIndex >= 1,
-                                                    isCurrent = stepIndex == 1,
-                                                    activeColor = BrandBluePrimary,
-                                                    testTag = "status_step_en_route",
-                                                    modifier = Modifier.weight(1f)
-                                                )
-
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(16.dp)
-                                                        .height(2.dp)
-                                                        .background(if (stepIndex >= 2) AccentAmber else Color.LightGray.copy(alpha = 0.4f))
-                                                )
-
-                                                // Step 2: Arrived
-                                                StatusStepItem(
-                                                    stepNumber = "2",
-                                                    label = "Arrived",
-                                                    isActive = stepIndex >= 2,
-                                                    isCurrent = stepIndex == 2,
-                                                    activeColor = AccentAmber,
-                                                    testTag = "status_step_arrived",
-                                                    modifier = Modifier.weight(1f)
-                                                )
-
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(16.dp)
-                                                        .height(2.dp)
-                                                        .background(if (stepIndex >= 3) SuccessGreen else Color.LightGray.copy(alpha = 0.4f))
-                                                )
-
-                                                // Step 3: Trip in Progress
-                                                StatusStepItem(
-                                                    stepNumber = "3",
-                                                    label = "Trip in Progress",
-                                                    isActive = stepIndex >= 3,
-                                                    isCurrent = stepIndex == 3,
-                                                    activeColor = SuccessGreen,
-                                                    testTag = "status_step_in_progress",
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                            }
+                                            // 4-Step Visual Progress Tracker (Driver Assigned, Driver Arrived, Trip In Progress, Trip Completed)
+                                            RideStatusStepIndicator(
+                                                currentStatus = tripStatus,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
                                         }
                                     }
 
@@ -4359,6 +4339,7 @@ fun ProfileScreenContent(
     viewModel: WayGoViewModel,
     profile: UserProfileEntity?,
     initialSection: String = "PROFILE",
+    onSignOutClick: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -6476,7 +6457,7 @@ fun ProfileScreenContent(
                         }
 
                         OutlinedButton(
-                            onClick = { viewModel.logout() },
+                            onClick = onSignOutClick,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(46.dp)

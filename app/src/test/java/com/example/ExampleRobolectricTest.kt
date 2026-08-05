@@ -404,4 +404,85 @@ class ExampleRobolectricTest {
         assertEquals("drv_close", matchedCar.id)
         assertEquals("Close Driver", matchedCar.name)
     }
+
+    @Test
+    fun testSignInWithEmailValidationAndSuccess() {
+        var successCalled = false
+        var errorMessage: String? = null
+
+        // Test 1: Blank email validation
+        FirebaseAuthManager.signInWithEmail("", "pass123", {
+            successCalled = true
+        }, { error ->
+            errorMessage = error
+        })
+        assertEquals(false, successCalled)
+        assertEquals("Please enter a valid email address (e.g. user@waygo.com).", errorMessage)
+
+        // Test 2: Short password validation
+        successCalled = false
+        errorMessage = null
+        FirebaseAuthManager.signInWithEmail("user@waygo.com", "123", {
+            successCalled = true
+        }, { error ->
+            errorMessage = error
+        })
+        assertEquals(false, successCalled)
+        assertEquals("Password must be at least 4 characters long.", errorMessage)
+
+        // Test 3: Successful sign in
+        successCalled = false
+        errorMessage = null
+        FirebaseAuthManager.signInWithEmail("testuser@waygo.com", "password123", {
+            successCalled = true
+        }, { error ->
+            errorMessage = error
+        })
+        assertEquals(true, successCalled)
+        assertNull(errorMessage)
+    }
+
+    @Test
+    fun testGoogleAccountAuthValidationAndRegistration() {
+        var errorResult: String? = null
+        var successResult = false
+
+        val viewModel = WayGoViewModel(repository)
+
+        // Test invalid email validation
+        viewModel.loginOrRegisterPassengerWithGoogle(
+            googleEmail = "invalidemail",
+            googleName = "Test User",
+            pass = "pass123",
+            isRegisterMode = true,
+            onSuccess = { successResult = true },
+            onError = { err -> errorResult = err }
+        )
+        assertEquals(false, successResult)
+        assertEquals("Please enter a valid Google email address.", errorResult)
+
+        // Test valid registration
+        errorResult = null
+        successResult = false
+        viewModel.loginOrRegisterPassengerWithGoogle(
+            googleEmail = "david.otu@gmail.com",
+            googleName = "David Otu",
+            pass = "googlepass123",
+            isRegisterMode = true,
+            onSuccess = { successResult = true },
+            onError = { err -> errorResult = err }
+        )
+        assertNull(errorResult)
+    }
+
+    @Test
+    fun testSignOutFlow() {
+        val viewModel = WayGoViewModel(repository)
+        viewModel.verifyOtp("1234") // Log in passenger
+        assertEquals(true, viewModel.isUserLoggedIn.value)
+
+        // Perform sign out
+        viewModel.logout()
+        assertEquals(false, viewModel.isUserLoggedIn.value)
+    }
 }

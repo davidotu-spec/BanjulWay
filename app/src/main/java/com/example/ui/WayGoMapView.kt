@@ -482,14 +482,83 @@ fun WayGoMapView(
                     strokeWidth = 6.dp.toPx()
                 )
 
-                // Smooth Car Marker Position on Route
+                // Smooth Car Marker Position on Route (Live Driver Current Position)
                 val routeProgress = if (progress > 0f) progress else 0.4f
-                val cX = pX + (dX - pX) * routeProgress
-                val cY = pY + (dY - pY) * routeProgress
+                val cX = if (simulatedDriverLat != null && simulatedDriverLng != null) getX(simulatedDriverLng) else pX + (dX - pX) * routeProgress
+                val cY = if (simulatedDriverLat != null && simulatedDriverLng != null) getY(simulatedDriverLat) else pY + (dY - pY) * routeProgress
 
-                drawCircle(color = BrandBluePrimary.copy(alpha = 0.35f), radius = 16.dp.toPx() * pulseScale, center = Offset(cX, cY))
-                drawCircle(color = Color.White, radius = 9.dp.toPx(), center = Offset(cX, cY))
-                drawCircle(color = BrandBluePrimary, radius = 6.dp.toPx(), center = Offset(cX, cY))
+                // Subtle Outer Pulsing Radar Rings for Driver's Current Position
+                val activePulseRadius1 = 26.dp.toPx() * pulseScale
+                val activePulseRadius2 = 17.dp.toPx() * (1.0f + (pulseScale - 1.0f) * 0.5f)
+
+                // 1. Spreading outer translucent blue pulse ring
+                drawCircle(
+                    color = BrandBluePrimary.copy(alpha = pulseAlpha * 0.45f),
+                    radius = activePulseRadius1,
+                    center = Offset(cX, cY)
+                )
+
+                // 2. Secondary inner amber glow pulse ring
+                drawCircle(
+                    color = AccentAmber.copy(alpha = pulseAlpha * 0.35f),
+                    radius = activePulseRadius2,
+                    center = Offset(cX, cY)
+                )
+
+                // 3. Drop shadow for elevation depth
+                drawCircle(
+                    color = Color.Black.copy(alpha = 0.25f),
+                    radius = 11.dp.toPx(),
+                    center = Offset(cX, cY + 2.dp.toPx())
+                )
+
+                // 4. Solid white border base pin
+                drawCircle(
+                    color = Color.White,
+                    radius = 9.5.dp.toPx(),
+                    center = Offset(cX, cY)
+                )
+
+                // 5. Driver primary core pin
+                drawCircle(
+                    color = BrandBluePrimary,
+                    radius = 6.5.dp.toPx(),
+                    center = Offset(cX, cY)
+                )
+
+                // 6. Inner white center dot
+                drawCircle(
+                    color = Color.White,
+                    radius = 2.5.dp.toPx(),
+                    center = Offset(cX, cY)
+                )
+
+                // Active Driver Live Location Badge Pill
+                val driverPillText = if (activeTrip != null) "🚖 ${activeTrip.driverName ?: "Driver"} • Live GPS" else "🚖 Driver • Live Position"
+                val driverPillStyle = TextStyle(fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = BrandBlueDark)
+                val driverPillMeasured = textMeasurer.measure(driverPillText, driverPillStyle)
+                val dpW = driverPillMeasured.size.width + 14.dp.toPx()
+                val dpH = driverPillMeasured.size.height + 6.dp.toPx()
+                val dpL = cX - dpW / 2f
+                val dpT = cY - 18.dp.toPx() - dpH
+
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.95f),
+                    topLeft = Offset(dpL, dpT),
+                    size = androidx.compose.ui.geometry.Size(dpW, dpH),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f, 10f)
+                )
+                drawRoundRect(
+                    color = BrandBluePrimary,
+                    topLeft = Offset(dpL, dpT),
+                    size = androidx.compose.ui.geometry.Size(dpW, dpH),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(10f, 10f),
+                    style = Stroke(width = 2f)
+                )
+                drawText(
+                    textLayoutResult = driverPillMeasured,
+                    topLeft = Offset(dpL + 7.dp.toPx(), dpT + 3.dp.toPx())
+                )
 
                 // Overhead Live Route Traffic Summary Badge
                 val tagText = "🟢 Smooth • 🚦 Westfield Slowdown • ⏱️ 12m"
