@@ -1,6 +1,7 @@
 package com.example.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -123,17 +124,12 @@ fun AccountVerificationDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Simulated Inbox Email Notification Card
+                // Verification Email Sent Card
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .border(1.dp, BrandBluePrimary.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                        .clickable {
-                            inputCode = generatedCode
-                            errorMessage = ""
-                            successMessage = "Code $generatedCode auto-filled from simulated email!"
-                        },
+                        .border(1.dp, BrandBluePrimary.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
                     colors = CardDefaults.cardColors(
                         containerColor = BrandBlueLight.copy(alpha = 0.5f)
                     )
@@ -145,40 +141,23 @@ fun AccountVerificationDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Email,
-                            contentDescription = "Incoming Email",
+                            contentDescription = "Verification Email Dispatched",
                             tint = BrandBluePrimary,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "📩 Simulated Email Inbox",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = BrandBlueDark
-                                )
-                                Text(
-                                    text = "Tap to autofill",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = BrandBluePrimary
-                                )
-                            }
                             Text(
-                                text = "Subject: WayGo Account Verification Code",
-                                fontSize = 11.sp,
-                                color = textSecondary
-                            )
-                            Text(
-                                text = "Your Code: $generatedCode",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                text = "Verification Email Sent",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = BrandBlueDark
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Please open your email inbox ($userEmail) to view your 6-digit security code.",
+                                fontSize = 11.5.sp,
+                                color = textSecondary
                             )
                         }
                     }
@@ -252,7 +231,7 @@ fun AccountVerificationDialog(
                         isVerifying = true
                         val success = onVerifyCode(inputCode)
                         if (!success) {
-                            errorMessage = "Invalid code. Please check your email or tap autofill."
+                            errorMessage = "Invalid code. Please check your email inbox and try again."
                             isVerifying = false
                         }
                     },

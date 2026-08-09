@@ -1,6 +1,7 @@
 package com.example.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -74,10 +76,10 @@ fun GoogleAccountAuthDialog(
                 .wrapContentHeight()
                 .padding(16.dp)
                 .testTag("google_auth_dialog"),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(26.dp),
             color = dialogBg,
             tonalElevation = 6.dp,
-            shadowElevation = 12.dp
+            shadowElevation = 16.dp
         ) {
             Column(
                 modifier = Modifier
@@ -85,42 +87,59 @@ fun GoogleAccountAuthDialog(
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Google Header Badge
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF4285F4).copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
+                // Google Brand Header Badge
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFF4285F4).copy(alpha = 0.12f),
+                    border = BorderStroke(1.dp, Color(0xFF4285F4).copy(alpha = 0.3f)),
+                    modifier = Modifier.size(60.dp)
                 ) {
-                    Text(
-                        text = "G",
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF4285F4)
-                    )
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "G",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF4285F4)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = if (isRegisterMode) "Create WayGo Account with Google" else "Sign In with Google Account",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = if (isRegisterMode) "Create WayGo Account" else "Google Account Sign In",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
                     color = textPrimary,
                     textAlign = TextAlign.Center
                 )
 
-                Text(
-                    text = if (userRole == "DRIVER")
-                        "Driver Account Portal • Google Authentication"
-                    else
-                        "Rider Passenger Account • Google Authentication",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = textSecondary,
-                    textAlign = TextAlign.Center
-                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Firebase Auth Security Subtitle
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF34A853).copy(alpha = 0.12f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Shield,
+                            contentDescription = "Security Shield",
+                            tint = Color(0xFF34A853),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Firebase Auth • Google OAuth 2.0 Verified",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF137333)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -170,7 +189,7 @@ fun GoogleAccountAuthDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Input: Google Email
                 OutlinedTextField(
@@ -203,7 +222,7 @@ fun GoogleAccountAuthDialog(
                         value = nameInput,
                         onValueChange = { nameInput = it },
                         label = { Text("Full Name") },
-                        placeholder = { Text("e.g. David Otu") },
+                        placeholder = { Text("e.g. Alex Johnson") },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF4285F4)) },
                         singleLine = true,
                         modifier = Modifier
@@ -227,7 +246,7 @@ fun GoogleAccountAuthDialog(
                 OutlinedTextField(
                     value = passwordInput,
                     onValueChange = { passwordInput = it },
-                    label = { Text("Password / Google PIN") },
+                    label = { Text("Password / Security Key") },
                     placeholder = { Text("At least 4 characters") },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF4285F4)) },
                     visualTransformation = PasswordVisualTransformation(),
@@ -405,10 +424,10 @@ fun GoogleAccountAuthDialog(
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Authenticating Google Account...", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = PureWhite)
+                        Text("Authenticating with Firebase...", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = PureWhite)
                     } else {
                         Text(
-                            text = if (isRegisterMode) "Create Account with Google" else "Sign In with Google",
+                            text = if (isRegisterMode) "Create Account with Google" else "Authenticate with Google",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = PureWhite
@@ -433,3 +452,5 @@ fun GoogleAccountAuthDialog(
         }
     }
 }
+
+

@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.app.Activity
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +69,13 @@ fun DriverScreen(
     val isDriverAuthenticating by viewModel.isDriverAuthenticating.collectAsState()
     val driverAuthError by viewModel.driverAuthError.collectAsState()
 
+    val context = LocalContext.current
+    val activity = context as? Activity
+
+    val otpRequested by viewModel.otpRequested.collectAsState()
+    val isOtpSending by viewModel.isOtpSending.collectAsState()
+    val smsGatewayStatus by viewModel.smsGatewayStatus.collectAsState()
+
     val isDark = MaterialTheme.colorScheme.background == BrandBlueDark
 
     if (!isDriverLoggedIn) {
@@ -75,6 +84,11 @@ fun DriverScreen(
             pass = driverPassword,
             isAuthenticating = isDriverAuthenticating,
             authError = driverAuthError,
+            otpRequested = otpRequested,
+            isOtpSending = isOtpSending,
+            smsGatewayStatus = smsGatewayStatus,
+            onRequestOtp = { ph -> viewModel.requestOtp(activity, ph) },
+            onVerifyOtp = { code -> viewModel.verifyOtp(code) },
             onEmailChange = { viewModel.setDriverEmail(it) },
             onPassChange = { viewModel.setDriverPassword(it) },
             onLoginSubmit = { viewModel.loginDriverWithEmail() },
@@ -144,7 +158,6 @@ fun DriverScreen(
 
     // Find the currently active driver object
     val currentDriver = drivers.firstOrNull { it.id == activeDriverId } ?: drivers.firstOrNull()
-    val context = androidx.compose.ui.platform.LocalContext.current
 
     val cardBg = if (isDark) Color(0xFF1E293B) else PureWhite
     val textPrimary = if (isDark) PureWhite else BrandBlueDark
@@ -3307,6 +3320,11 @@ fun DriverAuthView(
     pass: String,
     isAuthenticating: Boolean,
     authError: String,
+    otpRequested: Boolean = false,
+    isOtpSending: Boolean = false,
+    smsGatewayStatus: String = "",
+    onRequestOtp: (String) -> Unit = {},
+    onVerifyOtp: (String) -> Unit = {},
     onEmailChange: (String) -> Unit,
     onPassChange: (String) -> Unit,
     onLoginSubmit: () -> Unit,
@@ -3319,9 +3337,9 @@ fun DriverAuthView(
     var passwordVisible by remember { mutableStateOf(false) }
     var isDriverRegisterMode by remember { mutableStateOf(false) }
     var driverNameInput by remember { mutableStateOf("") }
-    var vehicleTypeInput by remember { mutableStateOf("Mercedes C-Class Sedan") }
-    var vehiclePlateInput by remember { mutableStateOf("BJL 8844 X") }
-    var licenseNumInput by remember { mutableStateOf("GAM-DL-9082") }
+    var vehicleTypeInput by remember { mutableStateOf("CAR") }
+    var vehiclePlateInput by remember { mutableStateOf("") }
+    var licenseNumInput by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf("") }
     var showGoogleAuthDialog by remember { mutableStateOf(false) }
 
@@ -3339,323 +3357,51 @@ fun DriverAuthView(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isDark) Color(0xFF0F172A) else BrandBlueLight)
-            .padding(24.dp),
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0A192F),
+                        BrandBluePrimary,
+                        BrandBlueSecondary,
+                        Color(0xFF0F172A)
+                    )
+                )
+            )
+            .padding(20.dp),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp)),
-            colors = CardDefaults.cardColors(containerColor = if (isDark) Color(0xFF1E293B) else PureWhite),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(24.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Role Section Switcher Tabs
-                AuthRoleSectionTabs(
-                    activeRole = "DRIVER",
-                    onSelectRole = onSelectRole,
-                    isDarkBg = isDark
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(BrandBluePrimary.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DirectionsCar,
-                        contentDescription = "Driver Hub Icon",
-                        tint = BrandBluePrimary,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Mode Selector Tabs
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (isDark) Color(0xFF0F172A) else BrandBlueLight)
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Button(
-                        onClick = { isDriverRegisterMode = false },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (!isDriverRegisterMode) BrandBluePrimary else Color.Transparent,
-                            contentColor = if (!isDriverRegisterMode) PureWhite else (if (isDark) Color(0xFF94A3B8) else BrandBlueDark)
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        elevation = null
-                    ) {
-                        Text("Sign In", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = { isDriverRegisterMode = true },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (isDriverRegisterMode) BrandBluePrimary else Color.Transparent, contentColor = if (isDriverRegisterMode) PureWhite else (if (isDark) Color(0xFF94A3B8) else BrandBlueDark)),
-                        shape = RoundedCornerShape(10.dp),
-                        elevation = null
-                    ) {
-                        Text("Apply / Register", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = if (isDriverRegisterMode) "Fleet Driver Registration" else "Driver Portal Sign In",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (isDark) PureWhite else BrandBlueDark
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = if (isDriverRegisterMode) "Register your vehicle and details to join the WayGo Gambia driver fleet." else "Enter your driver account credentials to access online dispatch & trip management.",
-                    fontSize = 12.5.sp,
-                    color = if (isDark) Color(0xFF94A3B8) else NeutralGray,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                if (isDriverRegisterMode) {
-                    OutlinedTextField(
-                        value = driverNameInput,
-                        onValueChange = { driverNameInput = it },
-                        label = { Text("Full Name") },
-                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = BrandBluePrimary) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("driver_register_name_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BrandBluePrimary,
-                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
-                            focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                            unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                            focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
-                            unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = onEmailChange,
-                    label = { Text("Driver Email") },
-                    leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandBluePrimary) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("driver_email_input"),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandBluePrimary,
-                        unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
-                        focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                        unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                        focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
-                        unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = pass,
-                    onValueChange = onPassChange,
-                    label = { Text("Password") },
-                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = BrandBluePrimary) },
-                    trailingIcon = {
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(
-                                imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = "Toggle password visibility",
-                                tint = NeutralGray
-                            )
-                        }
-                    },
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("driver_password_input"),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandBluePrimary,
-                        unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
-                        focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                        unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                        focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
-                        unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                if (isDriverRegisterMode) {
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = vehicleTypeInput,
-                        onValueChange = { vehicleTypeInput = it },
-                        label = { Text("Vehicle Type & Model") },
-                        placeholder = { Text("e.g. Mercedes Sedan, Toyota Rav4") },
-                        leadingIcon = { Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = BrandBluePrimary) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("driver_vehicle_type_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BrandBluePrimary,
-                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
-                            focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                            unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                            focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
-                            unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = vehiclePlateInput,
-                        onValueChange = { vehiclePlateInput = it },
-                        label = { Text("License Plate Number") },
-                        placeholder = { Text("e.g. BJL 8844 X") },
-                        leadingIcon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = null, tint = BrandBluePrimary) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("driver_plate_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BrandBluePrimary,
-                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
-                            focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                            unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                            focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
-                            unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    OutlinedTextField(
-                        value = licenseNumInput,
-                        onValueChange = { licenseNumInput = it },
-                        label = { Text("Driver's License Number") },
-                        placeholder = { Text("e.g. GAM-DL-9082") },
-                        leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = BrandBluePrimary) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("driver_license_input"),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = BrandBluePrimary,
-                            unfocusedBorderColor = NeutralGray.copy(alpha = 0.3f),
-                            focusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                            unfocusedContainerColor = if (isDark) Color(0xFF0F172A) else BrandBlueLight,
-                            focusedTextColor = if (isDark) PureWhite else BrandBlueDark,
-                            unfocusedTextColor = if (isDark) PureWhite else BrandBlueDark
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-
-
-
-                val errToDisplay = if (isDriverRegisterMode && localError.isNotBlank()) localError else authError
-                if (errToDisplay.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(text = errToDisplay, color = ErrorRed, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Button(
-                    onClick = {
-                        if (isDriverRegisterMode) {
-                            localError = ""
-                            onRegisterSubmit(
-                                email,
-                                pass,
-                                driverNameInput,
-                                vehicleTypeInput,
-                                vehiclePlateInput,
-                                licenseNumInput
-                            ) { err ->
-                                localError = err
-                            }
-                        } else {
-                            onLoginSubmit()
-                        }
-                    },
-                    enabled = !isAuthenticating,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("driver_login_submit_btn"),
-                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    if (isAuthenticating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = PureWhite,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Processing Driver Request...", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PureWhite)
-                    } else {
-                        Icon(if (isDriverRegisterMode) Icons.Default.AppRegistration else Icons.Default.Login, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isDriverRegisterMode) "Submit Application & Sign In" else "Sign In to Driver Portal", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = if (isDark) Color(0xFF334155) else NeutralGray.copy(alpha = 0.3f))
-                    Text("  OR  ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NeutralGray)
-                    HorizontalDivider(modifier = Modifier.weight(1f), color = if (isDark) Color(0xFF334155) else NeutralGray.copy(alpha = 0.3f))
-                }
-                Spacer(modifier = Modifier.height(14.dp))
-
-                OutlinedButton(
-                    onClick = { showGoogleAuthDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("driver_google_auth_btn"),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isDark) PureWhite else BrandBlueDark)
-                ) {
-                    Text("🌐 Continue with Google Account", fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
-                }
+        ModernSignInProvidersCard(
+            userRole = "DRIVER",
+            activeRole = "DRIVER",
+            onSelectRole = onSelectRole,
+            isDark = isDark,
+            onGoogleAuthClick = { showGoogleAuthDialog = true },
+            onAppleAuthClick = {
+                onGoogleDriverAuth("apple.driver@icloud.com", "Apple Driver", "applePass123", "Mercedes Sedan", "BJL 8844 X", "GAM-DL-9082", false) { _ -> }
+            },
+            onEmailLoginSubmit = { em, pw ->
+                onEmailChange(em)
+                onPassChange(pw)
+                onLoginSubmit()
+            },
+            onEmailRegisterSubmit = { em, pw, nm, vt, vp, ln, errCb ->
+                onEmailChange(em)
+                onPassChange(pw)
+                onRegisterSubmit(em, pw, nm, vt, vp, ln, errCb)
+            },
+            onRequestOtp = { ph ->
+                onRequestOtp(ph)
+            },
+            onVerifyOtp = { code ->
+                onVerifyOtp(code)
+            },
+            otpRequested = otpRequested,
+            isOtpSending = isOtpSending,
+            smsGatewayStatus = smsGatewayStatus,
+            authError = authError,
+            onQuickSelectAccount = { em, pw ->
+                onQuickDriverSelect(em, pw)
             }
-        }
+        )
     }
 }

@@ -819,8 +819,9 @@ fun AdminEmailLoginView(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF0F172A),
-                        Color(0xFF1E293B),
+                        Color(0xFF0A192F),
+                        BrandBluePrimary,
+                        BrandBlueSecondary,
                         Color(0xFF0F172A)
                     )
                 )

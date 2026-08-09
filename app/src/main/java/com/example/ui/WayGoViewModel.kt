@@ -1,5 +1,6 @@
 package com.example.ui
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -619,35 +620,87 @@ class WayGoViewModel(
 
     fun requestOtp(activity: android.app.Activity?, phone: String) {
         val cleanPhone = phone.trim()
-        if (cleanPhone.isBlank() || cleanPhone.length < 5) {
+        if (cleanPhone.isBlank()) {
+            _otpRequested.value = false
+            _isOtpSending.value = false
+            _authError.value = ""
+            return
+        }
+        if (cleanPhone.length < 5) {
             _authError.value = "Please enter a valid phone number"
             return
         }
         _authError.value = ""
-        _enteredPhoneNumber.value = cleanPhone
+        val formattedPhone = SmsOtpGatewayManager.formatE164PhoneNumber(cleanPhone)
+        _enteredPhoneNumber.value = formattedPhone
         _isOtpSending.value = true
 
-        viewModelScope.launch {
-            val dispatchResult = SmsOtpGatewayManager.sendSmsOtp(activity?.applicationContext, cleanPhone)
-            _isOtpSending.value = false
-
-            when (dispatchResult) {
-                is SmsDispatchResult.Success -> {
-                    _verificationId.value = dispatchResult.messageSid
-                    _generatedOtp.value = dispatchResult.otpCode
+        if (activity != null && FirebaseAuthManager.firebaseAuth != null) {
+            FirebaseAuthManager.verifyPhoneNumber(
+                activity = activity,
+                phoneNumber = formattedPhone,
+                onCodeSent = { verId, simCode ->
+                    _isOtpSending.value = false
+                    _verificationId.value = verId
+                    if (simCode.isNotEmpty()) {
+                        _generatedOtp.value = simCode
+                    }
                     _otpRequested.value = true
-                    _isRealSmsSent.value = dispatchResult.isRealSmsSent
-                    _smsGatewayStatus.value = dispatchResult.statusMessage
+                    _isRealSmsSent.value = true
+                    _smsGatewayStatus.value = "SMS verification code dispatched via Firebase SMS Gateway to $formattedPhone."
                     _authError.value = ""
+                },
+                onInstantVerification = {
+                    _isOtpSending.value = false
+                    _isUserLoggedIn.value = true
+                    _currentRole.value = "PASSENGER"
+                    _authError.value = ""
+                },
+                onError = { err ->
+                    Log.w("WayGoViewModel", "Firebase phone auth error ($err), falling back to native SMS gateway")
+                    viewModelScope.launch {
+                        val dispatchResult = SmsOtpGatewayManager.sendSmsOtp(activity.applicationContext, formattedPhone)
+                        _isOtpSending.value = false
+                        when (dispatchResult) {
+                            is SmsDispatchResult.Success -> {
+                                _verificationId.value = dispatchResult.messageSid
+                                _generatedOtp.value = dispatchResult.otpCode
+                                _otpRequested.value = true
+                                _isRealSmsSent.value = dispatchResult.isRealSmsSent
+                                _smsGatewayStatus.value = dispatchResult.statusMessage
+                                _authError.value = ""
+                            }
+                            is SmsDispatchResult.Error -> {
+                                _authError.value = dispatchResult.errorMessage
+                            }
+                        }
+                    }
                 }
-                is SmsDispatchResult.Error -> {
-                    _authError.value = dispatchResult.errorMessage
-                    if (dispatchResult.fallbackOtpCode != null) {
-                        _verificationId.value = "fallback_ver_id_${System.currentTimeMillis()}"
-                        _generatedOtp.value = dispatchResult.fallbackOtpCode
+            )
+        } else {
+            viewModelScope.launch {
+                val context = activity?.applicationContext
+                val dispatchResult = SmsOtpGatewayManager.sendSmsOtp(context, formattedPhone)
+                _isOtpSending.value = false
+
+                when (dispatchResult) {
+                    is SmsDispatchResult.Success -> {
+                        _verificationId.value = dispatchResult.messageSid
+                        _generatedOtp.value = dispatchResult.otpCode
                         _otpRequested.value = true
-                        _isRealSmsSent.value = false
-                        _smsGatewayStatus.value = "Fallback Mode: ${dispatchResult.errorMessage}"
+                        _isRealSmsSent.value = dispatchResult.isRealSmsSent
+                        _smsGatewayStatus.value = dispatchResult.statusMessage
+                        _authError.value = ""
+                    }
+                    is SmsDispatchResult.Error -> {
+                        _authError.value = dispatchResult.errorMessage
+                        if (dispatchResult.fallbackOtpCode != null) {
+                            _verificationId.value = "fallback_ver_id_${System.currentTimeMillis()}"
+                            _generatedOtp.value = dispatchResult.fallbackOtpCode
+                            _otpRequested.value = true
+                            _isRealSmsSent.value = false
+                            _smsGatewayStatus.value = "SMS Dispatch: ${dispatchResult.errorMessage}"
+                        }
                     }
                 }
             }
@@ -662,20 +715,36 @@ class WayGoViewModel(
         }
         _authError.value = ""
 
-        val verifyResult = SmsOtpGatewayManager.verifyOtp(
-            phone = _enteredPhoneNumber.value,
-            enteredCode = cleanCode,
-            expectedCode = _generatedOtp.value
-        )
+        val currentVerId = _verificationId.value
+        if (currentVerId.isNotEmpty() && !currentVerId.startsWith("waygo_sid_") && !currentVerId.startsWith("fallback_ver_id_") && !currentVerId.startsWith("sim_ver_id_")) {
+            FirebaseAuthManager.signInWithCode(
+                verificationId = currentVerId,
+                code = cleanCode,
+                onSuccess = {
+                    _isUserLoggedIn.value = true
+                    _currentRole.value = "PASSENGER"
+                    _authError.value = ""
+                },
+                onError = { err ->
+                    _authError.value = err
+                }
+            )
+        } else {
+            val verifyResult = SmsOtpGatewayManager.verifyOtp(
+                phone = _enteredPhoneNumber.value,
+                enteredCode = cleanCode,
+                expectedCode = _generatedOtp.value
+            )
 
-        when (verifyResult) {
-            is SmsVerifyResult.Verified -> {
-                _isUserLoggedIn.value = true
-                _currentRole.value = "PASSENGER"
-                _authError.value = ""
-            }
-            is SmsVerifyResult.Failed -> {
-                _authError.value = verifyResult.reason
+            when (verifyResult) {
+                is SmsVerifyResult.Verified -> {
+                    _isUserLoggedIn.value = true
+                    _currentRole.value = "PASSENGER"
+                    _authError.value = ""
+                }
+                is SmsVerifyResult.Failed -> {
+                    _authError.value = verifyResult.reason
+                }
             }
         }
     }

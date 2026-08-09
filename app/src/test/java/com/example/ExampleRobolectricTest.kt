@@ -59,7 +59,7 @@ class ExampleRobolectricTest {
         // 2. Seed active trip that is completed but unrated (rating = 0)
         val trip = TripEntity(
             id = "trip_test",
-            passengerName = "David Otu",
+            passengerName = "Alex Johnson",
             driverId = "drv_test",
             driverName = "Test Driver",
             vehicleType = "CAR",
@@ -133,7 +133,7 @@ class ExampleRobolectricTest {
         // Seed active ride
         val activeTrip = TripEntity(
             id = "trip_to_cancel",
-            passengerName = "David Otu",
+            passengerName = "Alex Johnson",
             driverId = "drv_test",
             driverName = "Test Driver",
             vehicleType = "CAR",
@@ -178,7 +178,7 @@ class ExampleRobolectricTest {
         // Seed Banjul trip
         val banjulTrip = TripEntity(
             id = "trip_banjul_1",
-            passengerName = "David Otu",
+            passengerName = "Alex Johnson",
             driverId = driverId,
             driverName = "Test Driver",
             vehicleType = "CAR",
@@ -465,8 +465,8 @@ class ExampleRobolectricTest {
         errorResult = null
         successResult = false
         viewModel.loginOrRegisterPassengerWithGoogle(
-            googleEmail = "david.otu@gmail.com",
-            googleName = "David Otu",
+            googleEmail = "alex.johnson@gmail.com",
+            googleName = "Alex Johnson",
             pass = "googlepass123",
             isRegisterMode = true,
             onSuccess = { successResult = true },

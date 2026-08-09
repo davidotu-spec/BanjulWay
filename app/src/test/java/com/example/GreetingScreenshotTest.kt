@@ -200,7 +200,7 @@ class GreetingScreenshotTest {
   fun map_realtime_progress_hud_screenshot() {
     val dummyTrip = com.example.data.TripEntity(
       id = "trip_progress_test_123",
-      passengerName = "David Otu",
+      passengerName = "Alex Johnson",
       pickupName = "Albert Market, Banjul",
       dropoffName = "Kairaba Business Hub, Serrekunda",
       pickupLat = 13.4533,
