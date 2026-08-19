@@ -486,53 +486,11 @@ fun ModernSignInProvidersCard(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // BOTTOM PHONE SECTION EXACTLY MATCHING USER SPECIFICATION
+            // BOTTOM PHONE SECTION ("Enter your number")
             Column(modifier = Modifier.fillMaxWidth()) {
-                // SMS Verification Header card
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, borderCol)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = "SMS verification",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = textPrimary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Allow users to sign in using a one time passcode sent as a SMS to their mobile phones.",
-                            fontSize = 12.sp,
-                            color = textSecondary,
-                            lineHeight = 16.sp
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        HorizontalDivider(color = borderCol.copy(alpha = 0.5f))
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Message",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = textSecondary
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "%LOGIN_CODE% is your verification code for %APP_NAME%.",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = BrandBluePrimary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
                 Text(
                     text = "Enter your number",
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = textPrimary,
                     modifier = Modifier.fillMaxWidth()
