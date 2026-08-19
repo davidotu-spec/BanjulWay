@@ -417,7 +417,7 @@ class ExampleRobolectricTest {
             errorMessage = error
         })
         assertEquals(false, successCalled)
-        assertEquals("Please enter a valid email address (e.g. user@waygo.com).", errorMessage)
+        assertEquals("Please enter a valid email address.", errorMessage)
 
         // Test 2: Short password validation
         successCalled = false
@@ -430,10 +430,10 @@ class ExampleRobolectricTest {
         assertEquals(false, successCalled)
         assertEquals("Password must be at least 4 characters long.", errorMessage)
 
-        // Test 3: Successful sign in
+        // Test 3: Successful sign in with registered user
         successCalled = false
         errorMessage = null
-        FirebaseAuthManager.signInWithEmail("testuser@waygo.com", "password123", {
+        FirebaseAuthManager.signInWithEmail("test@waygo.com", "pass123", {
             successCalled = true
         }, { error ->
             errorMessage = error
@@ -484,5 +484,67 @@ class ExampleRobolectricTest {
         // Perform sign out
         viewModel.logout()
         assertEquals(false, viewModel.isUserLoggedIn.value)
+    }
+
+    @Test
+    fun testRejectWrongPasswordWhenMfaDisabled() {
+        var successCalled = false
+        var errorResult: String? = null
+
+        // Register user with specific password
+        FirebaseAuthManager.createUserWithEmail("testuser@waygo.com", "correctPass99", {
+            successCalled = true
+        }, { err ->
+            errorResult = err
+        })
+        assertEquals(true, successCalled)
+
+        // Attempt sign-in with wrong password
+        successCalled = false
+        errorResult = null
+        FirebaseAuthManager.signInWithEmail("testuser@waygo.com", "wrongPassword", {
+            successCalled = true
+        }, { err ->
+            errorResult = err
+        })
+        assertEquals(false, successCalled)
+        assertNotNull(errorResult)
+        assertEquals("Incorrect password for testuser@waygo.com. Please check your password and try again.", errorResult)
+
+        // Attempt sign-in with correct password
+        successCalled = false
+        errorResult = null
+        FirebaseAuthManager.signInWithEmail("testuser@waygo.com", "correctPass99", {
+            successCalled = true
+        }, { err ->
+            errorResult = err
+        })
+        assertEquals(true, successCalled)
+        assertNull(errorResult)
+    }
+
+    @Test
+    fun testGoogleDirectAuthWithoutMfa() {
+        var registered = false
+        var signedIn = false
+        var errorResult: String? = null
+
+        FirebaseAuthManager.createUserWithEmail(
+            email = "davidotu@mixxd.org",
+            pass = "davidSecret123",
+            onSuccess = { registered = true },
+            onError = { err -> errorResult = err }
+        )
+        assertEquals(true, registered)
+        assertNull(errorResult)
+
+        FirebaseAuthManager.signInWithEmail(
+            email = "davidotu@mixxd.org",
+            pass = "davidSecret123",
+            onSuccess = { signedIn = true },
+            onError = { err -> errorResult = err }
+        )
+        assertEquals(true, signedIn)
+        assertNull(errorResult)
     }
 }

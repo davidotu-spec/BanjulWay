@@ -58,7 +58,7 @@ fun AdminScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val activity = context as? android.app.Activity
 
-    var activeAdminTab by remember { mutableStateOf("METRICS") } // "METRICS", "DRIVERS", "SUPPORT", "SCHEDULED"
+    var activeAdminTab by remember { mutableStateOf("METRICS") } // "METRICS", "DRIVERS", "SUPPORT", "SCHEDULED", "SECURITY"
     var showSignOutModal by remember { mutableStateOf(false) }
 
     if (showSignOutModal) {
@@ -248,6 +248,13 @@ fun AdminScreen(
                     icon = { Icon(Icons.Default.QuestionAnswer, contentDescription = "Support") },
                     label = { Text("Tickets") }
                 )
+                NavigationBarItem(
+                    selected = activeAdminTab == "SECURITY",
+                    onClick = { activeAdminTab = "SECURITY" },
+                    icon = { Icon(Icons.Default.Shield, contentDescription = "Security Rules") },
+                    label = { Text("Security") },
+                    modifier = Modifier.testTag("admin_security_tab_item")
+                )
             }
         }
     ) { innerPadding ->
@@ -266,6 +273,7 @@ fun AdminScreen(
                     onCancel = { viewModel.cancelScheduledRide(it) },
                     onDispatch = { viewModel.adminDispatchScheduledRide(it) }
                 )
+                "SECURITY" -> AdminSecurityRulesTab()
             }
         }
     }

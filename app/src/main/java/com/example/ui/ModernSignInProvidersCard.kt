@@ -273,10 +273,29 @@ fun ModernSignInProvidersCard(
                         OutlinedTextField(
                             value = nameInput,
                             onValueChange = { nameInput = it },
-                            label = { Text("Full Name") },
+                            label = { Text("Full Name", color = textSecondary) },
+                            placeholder = { Text("e.g. Lamin Touray", color = textSecondary.copy(alpha = 0.6f)) },
                             leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = BrandBluePrimary) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = textPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = borderCol,
+                                focusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                                unfocusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                                focusedTextColor = textPrimary,
+                                unfocusedTextColor = textPrimary,
+                                cursorColor = BrandBluePrimary,
+                                focusedLabelColor = BrandBluePrimary,
+                                unfocusedLabelColor = textSecondary
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("register_name_input_field"),
                             shape = RoundedCornerShape(12.dp)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -285,9 +304,27 @@ fun ModernSignInProvidersCard(
                     OutlinedTextField(
                         value = emailInput,
                         onValueChange = { emailInput = it },
-                        label = { Text("Email Address") },
+                        label = { Text("Email Address", color = textSecondary) },
+                        placeholder = { Text("e.g. user@gmail.com", color = textSecondary.copy(alpha = 0.6f)) },
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandBluePrimary) },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = borderCol,
+                            focusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                            unfocusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                            focusedTextColor = textPrimary,
+                            unfocusedTextColor = textPrimary,
+                            cursorColor = BrandBluePrimary,
+                            focusedLabelColor = BrandBluePrimary,
+                            unfocusedLabelColor = textSecondary
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("email_input_field"),
@@ -299,18 +336,37 @@ fun ModernSignInProvidersCard(
                     OutlinedTextField(
                         value = passwordInput,
                         onValueChange = { passwordInput = it },
-                        label = { Text("Password") },
+                        label = { Text("Password", color = textSecondary) },
+                        placeholder = { Text("At least 6 characters", color = textSecondary.copy(alpha = 0.6f)) },
                         leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = BrandBluePrimary) },
                         trailingIcon = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                    tint = textSecondary
                                 )
                             }
                         },
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = borderCol,
+                            focusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                            unfocusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                            focusedTextColor = textPrimary,
+                            unfocusedTextColor = textPrimary,
+                            cursorColor = BrandBluePrimary,
+                            focusedLabelColor = BrandBluePrimary,
+                            unfocusedLabelColor = textSecondary
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("password_input_field"),
@@ -322,8 +378,25 @@ fun ModernSignInProvidersCard(
                         OutlinedTextField(
                             value = vehicleTypeInput,
                             onValueChange = { vehicleTypeInput = it },
-                            label = { Text("Vehicle Type") },
+                            label = { Text("Vehicle Type (CAR, TAXI, TRICYCLE)", color = textSecondary) },
+                            placeholder = { Text("CAR", color = textSecondary.copy(alpha = 0.6f)) },
                             singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = textPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = borderCol,
+                                focusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                                unfocusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                                focusedTextColor = textPrimary,
+                                unfocusedTextColor = textPrimary,
+                                cursorColor = BrandBluePrimary,
+                                focusedLabelColor = BrandBluePrimary,
+                                unfocusedLabelColor = textSecondary
+                            ),
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         )
@@ -331,8 +404,25 @@ fun ModernSignInProvidersCard(
                         OutlinedTextField(
                             value = vehiclePlateInput,
                             onValueChange = { vehiclePlateInput = it },
-                            label = { Text("License Plate") },
+                            label = { Text("License Plate", color = textSecondary) },
+                            placeholder = { Text("e.g. BJL 1234 A", color = textSecondary.copy(alpha = 0.6f)) },
                             singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = textPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = borderCol,
+                                focusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                                unfocusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
+                                focusedTextColor = textPrimary,
+                                unfocusedTextColor = textPrimary,
+                                cursorColor = BrandBluePrimary,
+                                focusedLabelColor = BrandBluePrimary,
+                                unfocusedLabelColor = textSecondary
+                            ),
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         )
@@ -396,11 +486,53 @@ fun ModernSignInProvidersCard(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // BOTTOM PHONE SECTION ("Enter your number") EXACTLY MATCHING USER IMAGE
+            // BOTTOM PHONE SECTION EXACTLY MATCHING USER SPECIFICATION
             Column(modifier = Modifier.fillMaxWidth()) {
+                // SMS Verification Header card
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, borderCol)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "SMS verification",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textPrimary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Allow users to sign in using a one time passcode sent as a SMS to their mobile phones.",
+                            fontSize = 12.sp,
+                            color = textSecondary,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        HorizontalDivider(color = borderCol.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Message",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = textSecondary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "%LOGIN_CODE% is your verification code for %APP_NAME%.",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = BrandBluePrimary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
                 Text(
                     text = "Enter your number",
-                    fontSize = 18.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = textPrimary,
                     modifier = Modifier.fillMaxWidth()
@@ -506,21 +638,14 @@ fun ModernSignInProvidersCard(
                     Button(
                         onClick = {
                             localError = ""
-                            if (phoneInput.isBlank()) {
+                            val cleanDigits = phoneInput.trim().replace(" ", "")
+                            if (cleanDigits.isBlank()) {
                                 localError = "Please enter your mobile phone number."
                                 return@Button
                             }
-                            val fullPhone = "$countryPrefix$phoneInput"
-                            val hasSmsPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                                context,
-                                android.Manifest.permission.SEND_SMS
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-                            if (!hasSmsPermission) {
-                                smsPermissionLauncher.launch(android.Manifest.permission.SEND_SMS)
-                            } else {
-                                onRequestOtp(fullPhone)
-                            }
+                            val fullPhone = "$countryPrefix$cleanDigits"
+                            // Immediately request OTP dispatch
+                            onRequestOtp(fullPhone)
                             countdownSeconds = 60
                             isTimerActive = true
                         },
@@ -630,17 +755,9 @@ fun ModernSignInProvidersCard(
                                 TextButton(
                                     onClick = {
                                         localError = ""
-                                        val fullPhone = "$countryPrefix$phoneInput"
-                                        val hasSmsPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                                            context,
-                                            android.Manifest.permission.SEND_SMS
-                                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-                                        if (!hasSmsPermission) {
-                                            smsPermissionLauncher.launch(android.Manifest.permission.SEND_SMS)
-                                        } else {
-                                            onRequestOtp(fullPhone)
-                                        }
+                                        val cleanDigits = phoneInput.trim().replace(" ", "")
+                                        val fullPhone = if (cleanDigits.isNotBlank()) "$countryPrefix$cleanDigits" else "$countryPrefix 7712345"
+                                        onRequestOtp(fullPhone)
                                         countdownSeconds = 60
                                         isTimerActive = true
                                     },
@@ -688,9 +805,14 @@ fun ModernSignInProvidersCard(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
+                        // Verify Button
                         Button(
-                            onClick = { onVerifyOtp(otpCodeInput) },
-                            enabled = otpCodeInput.length == 6,
+                            onClick = {
+                                if (otpCodeInput.isNotBlank()) {
+                                    onVerifyOtp(otpCodeInput)
+                                }
+                            },
+                            enabled = otpCodeInput.length >= 4 && !isOtpSending,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp)

@@ -21,13 +21,17 @@ data class ActiveRideRequest(
     val dropoffLng: Double = 0.0,
     val vehicleType: String = "CAR", // "CAR", "TAXI", "TRICYCLE", "VAN"
     val fareGmd: Int = 0,
-    val paymentMethod: String = "CASH", // "CASH", "WAVE", "AFRICELL"
-    val status: String = "SEARCHING", // "SEARCHING", "ACCEPTED", "ARRIVED", "IN_PROGRESS", "COMPLETED", "CANCELLED"
+    val paymentMethod: String = "CASH", // "CASH", "WAVE", "AFRICELL", "FLUTTERWAVE", "STRIPE"
+    val status: String = "REQUESTED", // "REQUESTED", "SEARCHING", "ACCEPTED", "ARRIVED", "EN_ROUTE", "COMPLETED", "CANCELLED"
     val driverId: String? = null,
     val driverName: String? = null,
     val driverPhone: String? = null,
     val vehiclePlate: String? = null,
+    val verificationPin: String = "",
+    val preferences: String = "",
+    val distanceKm: Double = 0.0,
     val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
     val geohash: String = GeoUtils.encodeGeohash(pickupLat, pickupLng)
 )
 
@@ -160,6 +164,14 @@ object FirestoreRideService {
             geohash = GeoUtils.encodeGeohash(request.pickupLat, request.pickupLng)
         )
 
+        // Validate write payload against WayGo Firestore Security Rules
+        val (isValidRule, ruleViolation) = FirebaseSecurityRulesManager.validateRideRequestWrite(updatedRequest)
+        if (!isValidRule) {
+            Log.e(TAG, "Security rules rejection: $ruleViolation")
+            onComplete(false, null)
+            return
+        }
+
         val requestData = hashMapOf(
             "requestId" to updatedRequest.requestId,
             "passengerId" to updatedRequest.passengerId,
@@ -179,7 +191,10 @@ object FirestoreRideService {
             "driverName" to updatedRequest.driverName,
             "driverPhone" to updatedRequest.driverPhone,
             "vehiclePlate" to updatedRequest.vehiclePlate,
+            "verificationPin" to updatedRequest.verificationPin,
+            "preferences" to updatedRequest.preferences,
             "createdAt" to updatedRequest.createdAt,
+            "updatedAt" to updatedRequest.updatedAt,
             "geohash" to updatedRequest.geohash
         )
 
@@ -271,6 +286,29 @@ object FirestoreRideService {
     ) {
         val firestore = db
         val geohash = GeoUtils.encodeGeohash(latitude, longitude)
+        val driverLoc = DriverLocationData(
+            driverId = driverId,
+            driverName = driverName,
+            driverPhone = driverPhone,
+            vehicleType = vehicleType,
+            vehiclePlate = vehiclePlate,
+            latitude = latitude,
+            longitude = longitude,
+            isOnline = isOnline,
+            isAvailable = isAvailable,
+            rating = rating,
+            lastUpdated = System.currentTimeMillis(),
+            geohash = geohash
+        )
+
+        // Validate telematics payload against WayGo Firestore Security Rules
+        val (isValidRule, ruleViolation) = FirebaseSecurityRulesManager.validateDriverLocationWrite(driverLoc)
+        if (!isValidRule) {
+            Log.e(TAG, "Telematics security rules rejection: $ruleViolation")
+            onComplete(false)
+            return
+        }
+
         val data = hashMapOf(
             "driverId" to driverId,
             "driverName" to driverName,
@@ -432,12 +470,15 @@ object FirestoreRideService {
                             vehicleType = snapshot.getString("vehicleType") ?: "CAR",
                             fareGmd = snapshot.getLong("fareGmd")?.toInt() ?: 150,
                             paymentMethod = snapshot.getString("paymentMethod") ?: "CASH",
-                            status = snapshot.getString("status") ?: "SEARCHING",
+                            status = snapshot.getString("status") ?: "REQUESTED",
                             driverId = snapshot.getString("driverId"),
                             driverName = snapshot.getString("driverName"),
                             driverPhone = snapshot.getString("driverPhone"),
                             vehiclePlate = snapshot.getString("vehiclePlate"),
-                            createdAt = snapshot.getLong("createdAt") ?: System.currentTimeMillis()
+                            verificationPin = snapshot.getString("verificationPin") ?: "",
+                            preferences = snapshot.getString("preferences") ?: "",
+                            createdAt = snapshot.getLong("createdAt") ?: System.currentTimeMillis(),
+                            updatedAt = snapshot.getLong("updatedAt") ?: System.currentTimeMillis()
                         )
                         onUpdate(req)
                     } else {
@@ -446,6 +487,91 @@ object FirestoreRideService {
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Snapshot listener registration error: ${e.localizedMessage}")
+            null
+        }
+    }
+
+    /**
+     * Real-time snapshot listener for active drivers to receive ride requests created in their vicinity.
+     * Triggers whenever passengers create a new ride document in Firestore or when active requests change.
+     */
+    fun listenForNearbyRideRequests(
+        driverLat: Double,
+        driverLng: Double,
+        vehicleTypeFilter: String? = null,
+        radiusKm: Double = 15.0,
+        onRequestsChanged: (List<ActiveRideRequest>) -> Unit
+    ): ListenerRegistration? {
+        val firestore = db ?: return null
+        return try {
+            firestore.collection(COLLECTION_RIDE_REQUESTS)
+                .whereIn("status", listOf("REQUESTED", "SEARCHING"))
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        Log.e(TAG, "Driver vicinity ride request listener error", error)
+                        return@addSnapshotListener
+                    }
+
+                    if (snapshot == null || snapshot.isEmpty) {
+                        onRequestsChanged(emptyList())
+                        return@addSnapshotListener
+                    }
+
+                    val nearbyRequests = mutableListOf<ActiveRideRequest>()
+                    for (doc in snapshot.documents) {
+                        try {
+                            val pLat = doc.getDouble("pickupLat") ?: continue
+                            val pLng = doc.getDouble("pickupLng") ?: continue
+                            val vType = doc.getString("vehicleType") ?: "CAR"
+
+                            // Filter vehicle type if specified and not matching
+                            if (vehicleTypeFilter != null && vehicleTypeFilter != "ALL" &&
+                                !vType.equals(vehicleTypeFilter, ignoreCase = true)) {
+                                continue
+                            }
+
+                            val dist = GeoUtils.haversineDistanceKm(driverLat, driverLng, pLat, pLng)
+                            if (dist <= radiusKm) {
+                                val req = ActiveRideRequest(
+                                    requestId = doc.getString("requestId") ?: doc.id,
+                                    passengerId = doc.getString("passengerId") ?: "",
+                                    passengerName = doc.getString("passengerName") ?: "Passenger",
+                                    passengerPhone = doc.getString("passengerPhone") ?: "",
+                                    pickupName = doc.getString("pickupName") ?: "Pickup Location",
+                                    pickupLat = pLat,
+                                    pickupLng = pLng,
+                                    dropoffName = doc.getString("dropoffName") ?: "Dropoff Location",
+                                    dropoffLat = doc.getDouble("dropoffLat") ?: 0.0,
+                                    dropoffLng = doc.getDouble("dropoffLng") ?: 0.0,
+                                    vehicleType = vType,
+                                    fareGmd = doc.getLong("fareGmd")?.toInt() ?: 150,
+                                    paymentMethod = doc.getString("paymentMethod") ?: "CASH",
+                                    status = doc.getString("status") ?: "REQUESTED",
+                                    driverId = doc.getString("driverId"),
+                                    driverName = doc.getString("driverName"),
+                                    driverPhone = doc.getString("driverPhone"),
+                                    vehiclePlate = doc.getString("vehiclePlate"),
+                                    verificationPin = doc.getString("verificationPin") ?: "",
+                                    preferences = doc.getString("preferences") ?: "",
+                                    distanceKm = (dist * 10).roundToInt() / 10.0,
+                                    createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis(),
+                                    updatedAt = doc.getLong("updatedAt") ?: System.currentTimeMillis(),
+                                    geohash = doc.getString("geohash") ?: GeoUtils.encodeGeohash(pLat, pLng)
+                                )
+                                nearbyRequests.add(req)
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error parsing vicinity ride doc: ${e.localizedMessage}")
+                        }
+                    }
+
+                    // Sort closest to driver first
+                    nearbyRequests.sortBy { it.distanceKm }
+                    Log.d(TAG, "Vicinity listener received ${nearbyRequests.size} ride requests within ${radiusKm}km")
+                    onRequestsChanged(nearbyRequests)
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register driver vicinity snapshot listener: ${e.localizedMessage}")
             null
         }
     }

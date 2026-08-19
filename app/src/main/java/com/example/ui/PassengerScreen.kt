@@ -145,7 +145,9 @@ fun PassengerScreen(
             onRequestOtp = { viewModel.requestOtp(activity, it) },
             onVerifyOtp = { viewModel.verifyOtp(it) },
             onEmailLogin = { email, pass -> viewModel.loginPassengerWithEmail(email, pass) },
-            onEmailRegister = { email, pass, name -> viewModel.registerPassengerWithEmail(email, pass, name) },
+            onEmailRegister = { email, pass, name, errCb ->
+                viewModel.registerPassengerWithEmail(email, pass, name, onSuccess = {}, onError = errCb)
+            },
             onSocialLogin = { provider -> viewModel.socialLoginPassenger(provider) },
             onGoogleAuth = { email, name, pass, isRegister, onError ->
                 viewModel.loginOrRegisterPassengerWithGoogle(email, name, pass, isRegister, onSuccess = {}, onError = onError)
@@ -425,9 +427,7 @@ fun AuthRoleSectionTabs(
                     .padding(start = 4.dp, bottom = 4.dp)
                     .then(
                         if (onLongPressHeader != null) {
-                            Modifier.pointerInput(Unit) {
-                                detectTapGestures(onLongPress = { onLongPressHeader() })
-                            }
+                            Modifier.clickable { onLongPressHeader() }
                         } else Modifier
                     )
             )
@@ -446,18 +446,7 @@ fun AuthRoleSectionTabs(
                             .background(
                                 if (isSelected) BrandBluePrimary else Color.Transparent
                             )
-                            .then(
-                                if (onLongPressHeader != null) {
-                                    Modifier.pointerInput(Unit) {
-                                        detectTapGestures(
-                                            onTap = { onSelectRole(roleKey) },
-                                            onLongPress = { onLongPressHeader() }
-                                        )
-                                    }
-                                } else {
-                                    Modifier.clickable { onSelectRole(roleKey) }
-                                }
-                            ),
+                            .clickable { onSelectRole(roleKey) },
                         contentAlignment = Alignment.Center
                     ) {
                         Row(
@@ -496,7 +485,7 @@ fun PassengerAuthView(
     onRequestOtp: (String) -> Unit = {},
     onVerifyOtp: (String) -> Unit = {},
     onEmailLogin: (String, String) -> Unit = { _, _ -> },
-    onEmailRegister: (String, String, String) -> Unit = { _, _, _ -> },
+    onEmailRegister: (String, String, String, (String) -> Unit) -> Unit = { _, _, _, _ -> },
     onSocialLogin: (String) -> Unit = {},
     onGoogleAuth: (email: String, name: String, pass: String, isRegister: Boolean, onError: (String) -> Unit) -> Unit = { _, _, _, _, _ -> },
     onSelectRole: (String) -> Unit = {},
@@ -545,7 +534,10 @@ fun PassengerAuthView(
                     )
                 )
             )
-            .padding(20.dp),
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 20.dp),
         contentAlignment = Alignment.Center
     ) {
         ModernSignInProvidersCard(
@@ -559,7 +551,7 @@ fun PassengerAuthView(
                 onGoogleAuth("apple.user@icloud.com", "Apple User", "applePass123", false) { _ -> }
             },
             onEmailLoginSubmit = { em, pw -> onEmailLogin(em, pw) },
-            onEmailRegisterSubmit = { em, pw, nm, _, _, _, _ -> onEmailRegister(em, pw, nm) },
+            onEmailRegisterSubmit = { em, pw, nm, _, _, _, errCb -> onEmailRegister(em, pw, nm, errCb) },
             onRequestOtp = { ph -> onRequestOtp(ph) },
             onVerifyOtp = { code -> onVerifyOtp(code) },
             otpRequested = otpRequested,
@@ -6012,6 +6004,7 @@ fun FlutterwaveCheckoutDialog(
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { context ->
                         WebView(context).apply {
+                            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -6745,6 +6738,7 @@ fun StripeCheckoutDialog(
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { context ->
                         android.webkit.WebView(context).apply {
+                            setLayerType(android.view.View.LAYER_TYPE_HARDWARE, null)
                             layoutParams = android.view.ViewGroup.LayoutParams(
                                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                                 android.view.ViewGroup.LayoutParams.MATCH_PARENT

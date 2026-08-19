@@ -1,7 +1,7 @@
 package com.example.ui
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,16 +10,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.MarkEmailRead
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -41,10 +40,14 @@ fun AccountVerificationDialog(
     onResendEmail: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+
     var inputCode by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
     var successMessage by remember { mutableStateOf("") }
     var isVerifying by remember { mutableStateOf(false) }
+    var isResending by remember { mutableStateOf(false) }
 
     val dialogBg = if (isDark) Color(0xFF1E293B) else PureWhite
     val textPrimary = if (isDark) PureWhite else BrandBlueDark
@@ -71,18 +74,20 @@ fun AccountVerificationDialog(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Email Badge Icon
+                // Email / Security Badge Icon
                 Box(
                     modifier = Modifier
                         .size(60.dp)
                         .clip(CircleShape)
-                        .background(BrandBluePrimary.copy(alpha = 0.12f)),
+                        .background(
+                            Brush.linearGradient(listOf(BrandBluePrimary, Color(0xFF4285F4)))
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.MarkEmailRead,
                         contentDescription = "Email Verification Icon",
-                        tint = BrandBluePrimary,
+                        tint = PureWhite,
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -90,7 +95,7 @@ fun AccountVerificationDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Verify Your $userRole Account",
+                    text = "Verify Your Email",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = textPrimary,
@@ -100,8 +105,8 @@ fun AccountVerificationDialog(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "A confirmation email with a security verification code was dispatched to:",
-                    fontSize = 12.5.sp,
+                    text = "We have sent a 6-digit security code to:",
+                    fontSize = 13.sp,
                     color = textSecondary,
                     textAlign = TextAlign.Center
                 )
@@ -114,58 +119,49 @@ fun AccountVerificationDialog(
                     modifier = Modifier.padding(vertical = 2.dp)
                 ) {
                     Text(
-                        text = userEmail.ifBlank { "your email" },
-                        fontSize = 13.sp,
+                        text = userEmail.ifBlank { "your email address" },
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = BrandBluePrimary,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                // Verification Email Sent Card
+                // Information Card explaining real email delivery
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .border(1.dp, BrandBluePrimary.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
                     colors = CardDefaults.cardColors(
-                        containerColor = BrandBlueLight.copy(alpha = 0.5f)
+                        containerColor = if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC)
                     )
                 ) {
                     Row(
-                        modifier = Modifier
-                            .padding(12.dp),
+                        modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Email,
-                            contentDescription = "Verification Email Dispatched",
+                            contentDescription = null,
                             tint = BrandBluePrimary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Verification Email Sent",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BrandBlueDark
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Please open your email inbox ($userEmail) to view your 6-digit security code.",
-                                fontSize = 11.5.sp,
-                                color = textSecondary
-                            )
-                        }
+                        Text(
+                            text = "Please check your inbox (and spam/junk folder) and enter the 6-digit security code below.",
+                            fontSize = 11.5.sp,
+                            color = textSecondary,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // OTP Verification Code Input
+                // 6-Digit Code Input
                 OutlinedTextField(
                     value = inputCode,
                     onValueChange = {
@@ -174,17 +170,19 @@ fun AccountVerificationDialog(
                             errorMessage = ""
                         }
                     },
-                    label = { Text("Enter 6-Digit Verification Code") },
-                    placeholder = { Text("e.g. 849201") },
+                    label = { Text("6-Digit Security Code") },
+                    placeholder = { Text("• • • • • •") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("verification_code_input"),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = BrandBluePrimary,
-                        unfocusedBorderColor = NeutralGray
+                        unfocusedBorderColor = NeutralGray,
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary
                     )
                 )
 
@@ -193,7 +191,7 @@ fun AccountVerificationDialog(
                         text = errorMessage,
                         color = ErrorRed,
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }
@@ -224,15 +222,18 @@ fun AccountVerificationDialog(
                 // Verify Button
                 Button(
                     onClick = {
-                        if (inputCode.length < 6 && inputCode != generatedCode) {
-                            errorMessage = "Please enter the 6-digit verification code."
+                        keyboardController?.hide()
+                        if (inputCode.length < 4) {
+                            errorMessage = "Please enter the 6-digit verification code received in your email."
                             return@Button
                         }
                         isVerifying = true
                         val success = onVerifyCode(inputCode)
                         if (!success) {
-                            errorMessage = "Invalid code. Please check your email inbox and try again."
+                            errorMessage = "Incorrect code. Please verify the code sent to your email and try again."
                             isVerifying = false
+                        } else {
+                            Toast.makeText(context, "Account verified successfully!", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier
@@ -244,7 +245,7 @@ fun AccountVerificationDialog(
                         containerColor = BrandBluePrimary,
                         contentColor = PureWhite
                     ),
-                    enabled = !isVerifying
+                    enabled = !isVerifying && inputCode.isNotEmpty()
                 ) {
                     if (isVerifying) {
                         CircularProgressIndicator(
@@ -252,9 +253,44 @@ fun AccountVerificationDialog(
                             color = PureWhite,
                             strokeWidth = 2.dp
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Verifying...", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     } else {
-                        Text("Verify & Activate Account", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("Verify & Continue", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Direct Open Email App Action
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+                                addCategory(android.content.Intent.CATEGORY_APP_EMAIL)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Please open your email application to view your inbox.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .testTag("open_email_app_btn"),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = BrandBluePrimary),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.4f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Email,
+                        contentDescription = "Open Mail",
+                        modifier = Modifier.size(16.dp),
+                        tint = BrandBluePrimary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Open Email App", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -266,12 +302,16 @@ fun AccountVerificationDialog(
                 ) {
                     TextButton(
                         onClick = {
+                            isResending = true
                             onResendEmail()
                             inputCode = ""
                             errorMessage = ""
-                            successMessage = "A new confirmation email has been dispatched!"
+                            successMessage = "New verification code dispatched to your email."
+                            Toast.makeText(context, "Verification code resent to $userEmail", Toast.LENGTH_SHORT).show()
+                            isResending = false
                         },
-                        modifier = Modifier.testTag("resend_verification_btn")
+                        modifier = Modifier.testTag("resend_verification_btn"),
+                        enabled = !isResending
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
@@ -280,14 +320,14 @@ fun AccountVerificationDialog(
                             tint = BrandBluePrimary
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Resend Email", fontSize = 12.sp, color = BrandBluePrimary, fontWeight = FontWeight.SemiBold)
+                        Text("Resend Email", fontSize = 12.5.sp, color = BrandBluePrimary, fontWeight = FontWeight.SemiBold)
                     }
 
                     TextButton(
                         onClick = onDismiss,
                         modifier = Modifier.testTag("cancel_verification_btn")
                     ) {
-                        Text("Cancel", fontSize = 12.sp, color = textSecondary)
+                        Text("Cancel", fontSize = 12.5.sp, color = textSecondary)
                     }
                 }
             }

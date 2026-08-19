@@ -195,11 +195,16 @@ fun GoogleAccountAuthDialog(
                 OutlinedTextField(
                     value = emailInput,
                     onValueChange = { emailInput = it },
-                    label = { Text("Google Email Address") },
-                    placeholder = { Text("e.g. user@gmail.com") },
+                    label = { Text("Google Email Address", color = textSecondary) },
+                    placeholder = { Text("e.g. user@gmail.com", color = textSecondary.copy(alpha = 0.6f)) },
                     leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = Color(0xFF4285F4)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = textPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("google_email_input"),
@@ -209,7 +214,10 @@ fun GoogleAccountAuthDialog(
                         focusedContainerColor = inputBg,
                         unfocusedContainerColor = inputBg,
                         focusedTextColor = textPrimary,
-                        unfocusedTextColor = textPrimary
+                        unfocusedTextColor = textPrimary,
+                        cursorColor = Color(0xFF4285F4),
+                        focusedLabelColor = Color(0xFF4285F4),
+                        unfocusedLabelColor = textSecondary
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -221,10 +229,15 @@ fun GoogleAccountAuthDialog(
                     OutlinedTextField(
                         value = nameInput,
                         onValueChange = { nameInput = it },
-                        label = { Text("Full Name") },
-                        placeholder = { Text("e.g. Alex Johnson") },
+                        label = { Text("Full Name", color = textSecondary) },
+                        placeholder = { Text("e.g. Alex Johnson", color = textSecondary.copy(alpha = 0.6f)) },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF4285F4)) },
                         singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("google_name_input"),
@@ -234,7 +247,10 @@ fun GoogleAccountAuthDialog(
                             focusedContainerColor = inputBg,
                             unfocusedContainerColor = inputBg,
                             focusedTextColor = textPrimary,
-                            unfocusedTextColor = textPrimary
+                            unfocusedTextColor = textPrimary,
+                            cursorColor = Color(0xFF4285F4),
+                            focusedLabelColor = Color(0xFF4285F4),
+                            unfocusedLabelColor = textSecondary
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -246,12 +262,17 @@ fun GoogleAccountAuthDialog(
                 OutlinedTextField(
                     value = passwordInput,
                     onValueChange = { passwordInput = it },
-                    label = { Text("Password / Security Key") },
-                    placeholder = { Text("At least 4 characters") },
+                    label = { Text("Password / Security Key", color = textSecondary) },
+                    placeholder = { Text("At least 4 characters", color = textSecondary.copy(alpha = 0.6f)) },
                     leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF4285F4)) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        color = textPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("google_password_input"),
@@ -261,7 +282,10 @@ fun GoogleAccountAuthDialog(
                         focusedContainerColor = inputBg,
                         unfocusedContainerColor = inputBg,
                         focusedTextColor = textPrimary,
-                        unfocusedTextColor = textPrimary
+                        unfocusedTextColor = textPrimary,
+                        cursorColor = Color(0xFF4285F4),
+                        focusedLabelColor = Color(0xFF4285F4),
+                        unfocusedLabelColor = textSecondary
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -311,10 +335,15 @@ fun GoogleAccountAuthDialog(
                     OutlinedTextField(
                         value = vehiclePlate,
                         onValueChange = { vehiclePlate = it },
-                        label = { Text("Vehicle License Plate") },
-                        placeholder = { Text("e.g. BJL 8844 X") },
+                        label = { Text("Vehicle License Plate", color = textSecondary) },
+                        placeholder = { Text("e.g. BJL 8844 X", color = textSecondary.copy(alpha = 0.6f)) },
                         leadingIcon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = null, tint = Color(0xFF4285F4)) },
                         singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("google_plate_input"),
@@ -324,7 +353,10 @@ fun GoogleAccountAuthDialog(
                             focusedContainerColor = inputBg,
                             unfocusedContainerColor = inputBg,
                             focusedTextColor = textPrimary,
-                            unfocusedTextColor = textPrimary
+                            unfocusedTextColor = textPrimary,
+                            cursorColor = Color(0xFF4285F4),
+                            focusedLabelColor = Color(0xFF4285F4),
+                            unfocusedLabelColor = textSecondary
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )
@@ -334,10 +366,15 @@ fun GoogleAccountAuthDialog(
                     OutlinedTextField(
                         value = licenseNum,
                         onValueChange = { licenseNum = it },
-                        label = { Text("Driver License #") },
-                        placeholder = { Text("e.g. GAM-DL-9082") },
+                        label = { Text("Driver License #", color = textSecondary) },
+                        placeholder = { Text("e.g. GAM-DL-9082", color = textSecondary.copy(alpha = 0.6f)) },
                         leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = Color(0xFF4285F4)) },
                         singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("google_license_input"),
@@ -347,7 +384,10 @@ fun GoogleAccountAuthDialog(
                             focusedContainerColor = inputBg,
                             unfocusedContainerColor = inputBg,
                             focusedTextColor = textPrimary,
-                            unfocusedTextColor = textPrimary
+                            unfocusedTextColor = textPrimary,
+                            cursorColor = Color(0xFF4285F4),
+                            focusedLabelColor = Color(0xFF4285F4),
+                            unfocusedLabelColor = textSecondary
                         ),
                         shape = RoundedCornerShape(12.dp)
                     )

@@ -32,6 +32,8 @@ import com.example.data.DriverEntity
 import com.example.data.TripEntity
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -73,6 +75,7 @@ fun DriverScreen(
     val activity = context as? Activity
 
     val otpRequested by viewModel.otpRequested.collectAsState()
+    val generatedOtp by viewModel.generatedOtp.collectAsState()
     val isOtpSending by viewModel.isOtpSending.collectAsState()
     val smsGatewayStatus by viewModel.smsGatewayStatus.collectAsState()
 
@@ -85,6 +88,7 @@ fun DriverScreen(
             isAuthenticating = isDriverAuthenticating,
             authError = driverAuthError,
             otpRequested = otpRequested,
+            generatedOtp = generatedOtp,
             isOtpSending = isOtpSending,
             smsGatewayStatus = smsGatewayStatus,
             onRequestOtp = { ph -> viewModel.requestOtp(activity, ph) },
@@ -175,6 +179,26 @@ fun DriverScreen(
 
     // Visual demand surge alert notification state
     var activeSurgeEvent by remember { mutableStateOf<DemandSurgeEvent?>(null) }
+
+    // Real-time Firestore Vicinity Listener for Active Online Driver
+    LaunchedEffect(currentDriver?.id, currentDriver?.isOnline, currentDriver?.currentLat, currentDriver?.currentLng, currentDriver?.vehicleType) {
+        if (currentDriver != null && currentDriver.isOnline) {
+            viewModel.startListeningToNearbyRidesForDriver(
+                driverId = currentDriver.id,
+                driverLat = currentDriver.currentLat,
+                driverLng = currentDriver.currentLng,
+                vehicleType = currentDriver.vehicleType
+            )
+        } else {
+            viewModel.stopListeningToNearbyRides()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.stopListeningToNearbyRides()
+        }
+    }
 
     // Automated demand surge simulation engine
     LaunchedEffect(currentDriver?.isOnline, currentDriver?.id) {
@@ -3321,6 +3345,7 @@ fun DriverAuthView(
     isAuthenticating: Boolean,
     authError: String,
     otpRequested: Boolean = false,
+    generatedOtp: String = "",
     isOtpSending: Boolean = false,
     smsGatewayStatus: String = "",
     onRequestOtp: (String) -> Unit = {},
@@ -3367,7 +3392,10 @@ fun DriverAuthView(
                     )
                 )
             )
-            .padding(20.dp),
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 20.dp),
         contentAlignment = Alignment.Center
     ) {
         ModernSignInProvidersCard(
@@ -3396,6 +3424,7 @@ fun DriverAuthView(
                 onVerifyOtp(code)
             },
             otpRequested = otpRequested,
+            generatedOtp = generatedOtp,
             isOtpSending = isOtpSending,
             smsGatewayStatus = smsGatewayStatus,
             authError = authError,

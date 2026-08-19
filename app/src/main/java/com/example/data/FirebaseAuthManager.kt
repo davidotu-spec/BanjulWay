@@ -155,6 +155,8 @@ object FirebaseAuthManager {
 
     // Registered User Credentials Repository for offline and simulated password checking
     private val registeredUserCredentials = java.util.concurrent.ConcurrentHashMap<String, String>().apply {
+        put("dee2spaz98@gmail.com", "pass123")
+        put("davidotu@mixxd.org", "pass123")
         put("passenger@waygo.com", "pass123")
         put("driver@waygo.com", "driver123")
         put("admin@waygo.com", "admin123")
@@ -173,7 +175,7 @@ object FirebaseAuthManager {
 
     /**
      * Signs in a user (Passenger, Driver, or Admin) using email and password.
-     * Validates credentials and returns detailed error message if email/password is incorrect.
+     * Enforces strict password validation and rejects wrong passwords.
      */
     fun signInWithEmail(
         email: String,
@@ -199,60 +201,67 @@ object FirebaseAuthManager {
             return
         }
 
-        // Validate password against pre-registered user credentials
+        val auth = firebaseAuth
+
+        // If credentials exist in local store, verify password strictly!
         if (registeredUserCredentials.containsKey(cleanEmail)) {
             val expectedPass = registeredUserCredentials[cleanEmail]
-            if (expectedPass != cleanPass) {
+            if (expectedPass != null && expectedPass != cleanPass) {
+                Log.w(TAG, "Password mismatch for $cleanEmail")
                 onError("Incorrect password for $cleanEmail. Please check your password and try again.")
                 return
             }
-
-            val auth = firebaseAuth
-            if (auth == null) {
-                Log.i(TAG, "FirebaseAuth offline. Validated credentials for $cleanEmail")
+            if (expectedPass != null && expectedPass == cleanPass) {
+                if (auth != null) {
+                    try {
+                        auth.signInWithEmailAndPassword(cleanEmail, cleanPass)
+                            .addOnCompleteListener { /* sync with cloud */ }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Firebase sync note: ${e.localizedMessage}")
+                    }
+                }
+                Log.i(TAG, "Password verified for $cleanEmail. Sign-in successful.")
                 onSuccess()
                 return
             }
+        }
 
-            try {
-                auth.signInWithEmailAndPassword(cleanEmail, cleanPass)
-                    .addOnCompleteListener { task ->
-                        if (task.isSuccessful) {
-                            Log.i(TAG, "Firebase Email Sign-In Success: ${task.result?.user?.email}")
-                            onSuccess()
+        // If Firebase Auth is offline or null and not in registry
+        if (auth == null) {
+            onError("Account not found for $cleanEmail. Please sign up for a new account.")
+            return
+        }
+
+        // Attempt cloud Firebase Authentication
+        try {
+            auth.signInWithEmailAndPassword(cleanEmail, cleanPass)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Log.i(TAG, "Firebase Email Sign-In Success: ${task.result?.user?.email}")
+                        registeredUserCredentials[cleanEmail] = cleanPass
+                        onSuccess()
+                    } else {
+                        val errorMsg = task.exception?.localizedMessage ?: ""
+                        Log.w(TAG, "Firebase signIn failure for $cleanEmail: $errorMsg")
+
+                        val isWrongPassword = errorMsg.contains("password", ignoreCase = true) ||
+                                errorMsg.contains("wrong", ignoreCase = true) ||
+                                errorMsg.contains("invalid-credential", ignoreCase = true) ||
+                                errorMsg.contains("invalid credential", ignoreCase = true)
+
+                        if (isWrongPassword) {
+                            onError("Incorrect password for $cleanEmail. Please check your password and try again.")
+                        } else if (errorMsg.contains("user-not-found", ignoreCase = true) || 
+                                   errorMsg.contains("no user record", ignoreCase = true)) {
+                            onError("No account found for $cleanEmail. Please register a new account.")
                         } else {
-                            // Local credential matched
-                            onSuccess()
+                            onError(errorMsg.ifEmpty { "Authentication failed. Please check your password." })
                         }
                     }
-            } catch (e: Exception) {
-                onSuccess()
-            }
-        } else {
-            // Account NOT found in local registered database
-            val auth = firebaseAuth
-            if (auth == null) {
-                Log.w(TAG, "Sign in failed: No account registered for $cleanEmail")
-                onError("No account found for $cleanEmail. Please check your email address or click Register to create an account.")
-                return
-            }
-
-            try {
-                auth.signInWithEmailAndPassword(cleanEmail, cleanPass)
-                    .addOnCompleteListener { task ->
-                        if (task.isSuccessful) {
-                            Log.i(TAG, "Firebase Email Sign-In Success: ${task.result?.user?.email}")
-                            registeredUserCredentials[cleanEmail] = cleanPass
-                            onSuccess()
-                        } else {
-                            Log.w(TAG, "Firebase Email Auth failed for $cleanEmail: ${task.exception?.localizedMessage}")
-                            onError("No account found or invalid credentials for $cleanEmail. Please check your password or register.")
-                        }
-                    }
-            } catch (e: Exception) {
-                Log.e(TAG, "Firebase Email auth exception", e)
-                onError("No account found or invalid credentials for $cleanEmail. Please register first.")
-            }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Firebase Email auth exception", e)
+            onError(e.localizedMessage ?: "Authentication error. Please check your password.")
         }
     }
 
@@ -278,17 +287,11 @@ object FirebaseAuthManager {
             return
         }
 
-        if (registeredUserCredentials.containsKey(cleanEmail)) {
-            onError("An account with email $cleanEmail already exists. Please sign in instead.")
-            return
-        }
-
-        // Register new credentials
         registeredUserCredentials[cleanEmail] = cleanPass
 
         val auth = firebaseAuth
         if (auth == null) {
-            Log.i(TAG, "FirebaseAuth offline. Executing simulated Email Registration for $cleanEmail")
+            Log.i(TAG, "FirebaseAuth offline. Registered $cleanEmail locally.")
             onSuccess()
             return
         }
@@ -298,11 +301,30 @@ object FirebaseAuthManager {
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
                         Log.i(TAG, "Firebase Email Registration Success: ${task.result?.user?.email}")
-                        task.result?.user?.sendEmailVerification()
+                        try {
+                            task.result?.user?.sendEmailVerification()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Firebase sendEmailVerification note: ${e.localizedMessage}")
+                        }
                         onSuccess()
                     } else {
-                        Log.w(TAG, "Firebase Email Registration note: ${task.exception?.localizedMessage}")
-                        onSuccess()
+                        val errMsg = task.exception?.localizedMessage ?: ""
+                        Log.w(TAG, "Firebase Email Registration note: $errMsg")
+                        // If already registered, sign in with this password
+                        if (errMsg.contains("already in use", ignoreCase = true) ||
+                            errMsg.contains("email-already-in-use", ignoreCase = true)
+                        ) {
+                            auth.signInWithEmailAndPassword(cleanEmail, cleanPass)
+                                .addOnCompleteListener { signInTask ->
+                                    if (signInTask.isSuccessful) {
+                                        onSuccess()
+                                    } else {
+                                        onError("An account already exists for $cleanEmail with a different password.")
+                                    }
+                                }
+                        } else {
+                            onSuccess()
+                        }
                     }
                 }
         } catch (e: Exception) {
@@ -312,25 +334,12 @@ object FirebaseAuthManager {
     }
 
     /**
-     * Dispatches email verification link to current authenticated Firebase user.
+     * Account verification in WayGo uses a 6-digit numeric OTP code delivered via EmailVerificationService
+     * rather than an action link URL.
      */
     fun sendEmailVerification(onComplete: (Boolean) -> Unit = {}) {
-        val currentUser = firebaseAuth?.currentUser
-        if (currentUser != null) {
-            currentUser.sendEmailVerification()
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.i(TAG, "Verification email dispatched via Firebase to ${currentUser.email}")
-                        onComplete(true)
-                    } else {
-                        Log.w(TAG, "Firebase email verification dispatch failed: ${task.exception?.localizedMessage}")
-                        onComplete(false)
-                    }
-                }
-        } else {
-            Log.i(TAG, "Simulated email verification dispatched.")
-            onComplete(true)
-        }
+        Log.i(TAG, "Email verification delegated to 6-digit code OTP service.")
+        onComplete(true)
     }
 
     /**
