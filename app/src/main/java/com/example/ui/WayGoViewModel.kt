@@ -938,6 +938,70 @@ class WayGoViewModel(
         }
     }
 
+    /**
+     * Handles incoming deep links and App Links from Firebase passwordless email authentication.
+     */
+    fun handleIncomingEmailLink(emailLink: String, fallbackEmail: String? = null) {
+        if (FirebaseAuthManager.isSignInWithEmailLink(emailLink)) {
+            val targetEmail = fallbackEmail
+                ?: _pendingVerificationEmail.value.ifBlank { null }
+                ?: sharedPrefs?.getString("email_link_target", "davidotu@mixxd.org")
+                ?: "davidotu@mixxd.org"
+
+            Log.i("WayGoViewModel", "Handling incoming email link for $targetEmail: $emailLink")
+            FirebaseAuthManager.signInWithEmailLink(
+                email = targetEmail,
+                emailLink = emailLink,
+                onSuccess = { user ->
+                    _isUserLoggedIn.value = true
+                    _isVerificationPending.value = false
+                    val confirmedEmail = user?.email ?: targetEmail
+                    _authError.value = ""
+                    triggerPushNotification(
+                        "✅ Email Authenticated",
+                        "Successfully authenticated via email link for $confirmedEmail."
+                    )
+                },
+                onError = { error ->
+                    _authError.value = error
+                    Log.w("WayGoViewModel", "Email link sign-in error: $error")
+                }
+            )
+        }
+    }
+
+    /**
+     * Dispatches passwordless sign-in email link configured with authorized ActionCodeSettings.
+     */
+    fun sendPasswordlessSignInLink(email: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) {
+        val cleanEmail = email.trim().lowercase()
+        if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
+            _authError.value = "Please enter a valid email address."
+            onError("Please enter a valid email address.")
+            return
+        }
+
+        sharedPrefs?.edit()?.putString("email_link_target", cleanEmail)?.apply()
+        val actionCodeSettings = FirebaseAuthManager.createActionCodeSettings("https://gambiawaygo.com/__/auth/links")
+
+        FirebaseAuthManager.sendSignInLinkToEmail(
+            email = cleanEmail,
+            actionCodeSettings = actionCodeSettings,
+            onSuccess = {
+                _authError.value = ""
+                triggerPushNotification(
+                    "✉️ Sign-In Link Sent",
+                    "Sign-in link sent to $cleanEmail. Check your inbox to complete sign-in."
+                )
+                onSuccess()
+            },
+            onError = { err ->
+                _authError.value = err
+                onError(err)
+            }
+        )
+    }
+
     fun setDriverEmail(email: String) {
         _driverEmail.value = email
     }

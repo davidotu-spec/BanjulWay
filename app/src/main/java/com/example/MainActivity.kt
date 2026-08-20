@@ -37,6 +37,8 @@ import android.content.Intent
 import android.os.Build
 
 class MainActivity : ComponentActivity() {
+    private var currentViewModel: WayGoViewModel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -46,6 +48,17 @@ class MainActivity : ComponentActivity() {
             val sharedPrefs = app.getSharedPreferences("waygo_prefs", android.content.Context.MODE_PRIVATE)
             val factory = WayGoViewModelFactory(app.repository, sharedPrefs)
             val viewModel: WayGoViewModel = viewModel(factory = factory)
+            currentViewModel = viewModel
+
+            // Process App Links / Deep Links when activity is launched
+            LaunchedEffect(intent) {
+                intent?.data?.let { uri ->
+                    val urlString = uri.toString()
+                    if (com.example.data.FirebaseAuthManager.isSignInWithEmailLink(urlString)) {
+                        viewModel.handleIncomingEmailLink(urlString)
+                    }
+                }
+            }
 
             val themeMode by viewModel.themeMode.collectAsState()
             val isDarkTheme = when (themeMode) {
@@ -61,6 +74,17 @@ class MainActivity : ComponentActivity() {
                 ) {
                     WayGoMasterApp(viewModel)
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.data?.let { uri ->
+            val urlString = uri.toString()
+            if (com.example.data.FirebaseAuthManager.isSignInWithEmailLink(urlString)) {
+                currentViewModel?.handleIncomingEmailLink(urlString)
             }
         }
     }

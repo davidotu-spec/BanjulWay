@@ -26,11 +26,65 @@
             android:exported="true"
             android:label="@string/app_name"
             android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.MyApplication">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- App Links & Email Link Sign-In for Firebase Hosting & Custom Domains -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="gambiawaygo.com"
+                    android:pathPrefix="/__/auth/links" />
+                <data
+                    android:scheme="https"
+                    android:host="banjulway.firebaseapp.com"
+                    android:pathPrefix="/__/auth/links" />
+                <data
+                    android:scheme="https"
+                    android:host="banjulway.web.app"
+                    android:pathPrefix="/__/auth/links" />
+            </intent-filter>
+
+            <!-- General App Links for Gambia WayGo & BanjulWay domains -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="gambiawaygo.com" />
+                <data
+                    android:scheme="https"
+                    android:host="banjulway.firebaseapp.com" />
+                <data
+                    android:scheme="https"
+                    android:host="banjulway.web.app" />
+                <data
+                    android:scheme="https"
+                    android:host="waygo.gm" />
+            </intent-filter>
+
+            <!-- Custom Scheme Deep Links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="waygo"
+                    android:host="finishSignUp" />
+                <data
+                    android:scheme="waygo"
+                    android:host="auth" />
+                <data
+                    android:scheme="waygo"
+                    android:host="verifyEmail" />
             </intent-filter>
         </activity>
     </application>

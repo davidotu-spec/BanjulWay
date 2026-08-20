@@ -3,6 +3,7 @@ package com.example.data
 import android.app.Activity
 import android.util.Log
 import com.google.firebase.FirebaseException
+import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GetTokenResult
@@ -334,12 +335,133 @@ object FirebaseAuthManager {
     }
 
     /**
-     * Account verification in WayGo uses a 6-digit numeric OTP code delivered via EmailVerificationService
-     * rather than an action link URL.
+     * Creates ActionCodeSettings configured with authorized domains (gambiawaygo.com, banjulway.firebaseapp.com)
+     * and App Link redirects for the WayGo package.
+     */
+    fun createActionCodeSettings(
+        redirectUrl: String = "https://gambiawaygo.com/__/auth/links"
+    ): ActionCodeSettings {
+        return ActionCodeSettings.newBuilder()
+            .setUrl(redirectUrl)
+            .setHandleCodeInApp(true)
+            .setAndroidPackageName(
+                "com.aistudio.waygo.kxmpzq",
+                true, // installIfNotAvailable
+                "1"   // minimumVersion
+            )
+            .build()
+    }
+
+    /**
+     * Sends a passwordless sign-in email link to the given email address.
+     */
+    fun sendSignInLinkToEmail(
+        email: String,
+        actionCodeSettings: ActionCodeSettings = createActionCodeSettings(),
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val cleanEmail = email.trim().lowercase()
+        val auth = firebaseAuth
+        if (auth == null) {
+            Log.i(TAG, "FirebaseAuth offline. Passwordless link simulated for $cleanEmail")
+            onSuccess()
+            return
+        }
+
+        try {
+            auth.sendSignInLinkToEmail(cleanEmail, actionCodeSettings)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Log.i(TAG, "Firebase passwordless sign-in link dispatched to $cleanEmail with URL: ${actionCodeSettings.url}")
+                        onSuccess()
+                    } else {
+                        val errMsg = task.exception?.localizedMessage ?: "Failed to dispatch email sign-in link."
+                        Log.e(TAG, "sendSignInLinkToEmail error: $errMsg", task.exception)
+                        onError(errMsg)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "sendSignInLinkToEmail exception", e)
+            onError(e.localizedMessage ?: "Error sending email link.")
+        }
+    }
+
+    /**
+     * Checks if an incoming URI or deep link represents a Firebase Email Sign-In link.
+     */
+    fun isSignInWithEmailLink(emailLink: String): Boolean {
+        val auth = firebaseAuth ?: return false
+        return try {
+            auth.isSignInWithEmailLink(emailLink)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Signs in with the email link (passwordless authentication) upon deep link redirect.
+     */
+    fun signInWithEmailLink(
+        email: String,
+        emailLink: String,
+        onSuccess: (FirebaseUser?) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val cleanEmail = email.trim().lowercase()
+        val auth = firebaseAuth
+        if (auth == null) {
+            Log.i(TAG, "FirebaseAuth offline. Completing simulated email link sign-in for $cleanEmail")
+            onSuccess(null)
+            return
+        }
+
+        try {
+            auth.signInWithEmailLink(cleanEmail, emailLink)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val user = task.result?.user
+                        Log.i(TAG, "Passwordless email link sign-in succeeded for ${user?.email} (uid: ${user?.uid})")
+                        onSuccess(user)
+                    } else {
+                        val err = task.exception?.localizedMessage ?: "Invalid or expired sign-in link."
+                        Log.e(TAG, "signInWithEmailLink error: $err", task.exception)
+                        onError(err)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "signInWithEmailLink exception", e)
+            onError(e.localizedMessage ?: "Sign-in with link failed.")
+        }
+    }
+
+    /**
+     * Sends Firebase email verification with ActionCodeSettings matching authorized domains.
      */
     fun sendEmailVerification(onComplete: (Boolean) -> Unit = {}) {
-        Log.i(TAG, "Email verification delegated to 6-digit code OTP service.")
-        onComplete(true)
+        val auth = firebaseAuth
+        val currentUser = auth?.currentUser
+        if (currentUser != null) {
+            try {
+                val actionCodeSettings = createActionCodeSettings("https://banjulway.firebaseapp.com/verifyEmail")
+                currentUser.sendEmailVerification(actionCodeSettings)
+                    .addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            Log.i(TAG, "Firebase sendEmailVerification with ActionCodeSettings sent to ${currentUser.email}")
+                            onComplete(true)
+                        } else {
+                            Log.w(TAG, "Firebase sendEmailVerification notice: ${task.exception?.localizedMessage}")
+                            onComplete(false)
+                        }
+                    }
+            } catch (e: Exception) {
+                Log.w(TAG, "sendEmailVerification error: ${e.localizedMessage}")
+                onComplete(true)
+            }
+        } else {
+            Log.i(TAG, "Email verification delegated to 6-digit code OTP service.")
+            onComplete(true)
+        }
     }
 
     /**
