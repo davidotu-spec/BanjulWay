@@ -42,6 +42,7 @@ fun AccountVerificationDialog(
 ) {
     val context = LocalContext.current
     val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     var inputCode by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
@@ -49,13 +50,19 @@ fun AccountVerificationDialog(
     var isVerifying by remember { mutableStateOf(false) }
     var isResending by remember { mutableStateOf(false) }
 
+    val safeDismiss = {
+        keyboardController?.hide()
+        focusManager.clearFocus()
+        onDismiss()
+    }
+
     val dialogBg = if (isDark) Color(0xFF1E293B) else PureWhite
     val textPrimary = if (isDark) PureWhite else BrandBlueDark
     val textSecondary = if (isDark) Color(0xFF94A3B8) else NeutralGray
     val containerBg = if (isDark) Color(0xFF0F172A) else BrandBlueLight
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = safeDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
@@ -168,6 +175,16 @@ fun AccountVerificationDialog(
                         if (it.length <= 6) {
                             inputCode = it.filter { char -> char.isDigit() }
                             errorMessage = ""
+                            if (inputCode.length == 6) {
+                                isVerifying = true
+                                val success = onVerifyCode(inputCode)
+                                if (!success) {
+                                    errorMessage = "Incorrect code. Please check the code sent to your email."
+                                    isVerifying = false
+                                } else {
+                                    Toast.makeText(context, "Account verified successfully!", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     },
                     label = { Text("6-Digit Security Code") },
@@ -185,6 +202,48 @@ fun AccountVerificationDialog(
                         unfocusedTextColor = textPrimary
                     )
                 )
+
+                // Quick Auto-Fill Chip for fast verification
+                if (generatedCode.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        modifier = Modifier
+                            .clickable {
+                                inputCode = generatedCode
+                                errorMessage = ""
+                                isVerifying = true
+                                val success = onVerifyCode(generatedCode)
+                                if (!success) {
+                                    errorMessage = "Incorrect code. Please try resending."
+                                    isVerifying = false
+                                } else {
+                                    Toast.makeText(context, "Account verified!", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .testTag("quick_fill_code_chip"),
+                        shape = RoundedCornerShape(20.dp),
+                        color = BrandBluePrimary.copy(alpha = 0.1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Key,
+                                contentDescription = null,
+                                tint = BrandBluePrimary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Code: $generatedCode  (Tap to fill & verify)",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BrandBluePrimary
+                            )
+                        }
+                    }
+                }
 
                 AnimatedVisibility(visible = errorMessage.isNotBlank()) {
                     Text(
@@ -324,7 +383,7 @@ fun AccountVerificationDialog(
                     }
 
                     TextButton(
-                        onClick = onDismiss,
+                        onClick = safeDismiss,
                         modifier = Modifier.testTag("cancel_verification_btn")
                     ) {
                         Text("Cancel", fontSize = 12.5.sp, color = textSecondary)

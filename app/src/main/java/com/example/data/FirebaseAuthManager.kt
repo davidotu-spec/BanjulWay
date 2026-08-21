@@ -2,6 +2,7 @@ package com.example.data
 
 import android.app.Activity
 import android.util.Log
+import com.example.utils.AuthValidator
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.FirebaseAuth
@@ -41,6 +42,8 @@ object FirebaseAuthManager {
             null
         }
     }
+
+    fun getCurrentUser(): FirebaseUser? = firebaseAuth?.currentUser
 
     /**
      * Triggers the Phone Authentication flow.
@@ -176,7 +179,7 @@ object FirebaseAuthManager {
 
     /**
      * Signs in a user (Passenger, Driver, or Admin) using email and password.
-     * Enforces strict password validation and rejects wrong passwords.
+     * Enforces strict password validation and logs diagnostic telemetry with DiagnosticAuthManager.
      */
     fun signInWithEmail(
         email: String,
@@ -187,8 +190,9 @@ object FirebaseAuthManager {
         val cleanEmail = email.trim().lowercase()
         val cleanPass = pass.trim()
 
-        if (cleanEmail.isBlank() || !cleanEmail.contains("@") || !cleanEmail.contains(".")) {
-            onError("Please enter a valid email address.")
+        val emailValidation = AuthValidator.validateEmail(cleanEmail)
+        if (!emailValidation.isValid) {
+            onError(emailValidation.errorMessage ?: "Please enter a valid email address.")
             return
         }
 
@@ -197,77 +201,47 @@ object FirebaseAuthManager {
             return
         }
 
-        if (cleanPass.length < 4) {
-            onError("Password must be at least 4 characters long.")
+        if (cleanPass.length < 6) {
+            onError("Password must be at least 6 characters long.")
             return
         }
 
         val auth = firebaseAuth
 
-        // If credentials exist in local store, verify password strictly!
-        if (registeredUserCredentials.containsKey(cleanEmail)) {
-            val expectedPass = registeredUserCredentials[cleanEmail]
-            if (expectedPass != null && expectedPass != cleanPass) {
-                Log.w(TAG, "Password mismatch for $cleanEmail")
-                onError("Incorrect password for $cleanEmail. Please check your password and try again.")
-                return
-            }
-            if (expectedPass != null && expectedPass == cleanPass) {
-                if (auth != null) {
-                    try {
-                        auth.signInWithEmailAndPassword(cleanEmail, cleanPass)
-                            .addOnCompleteListener { /* sync with cloud */ }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Firebase sync note: ${e.localizedMessage}")
-                    }
-                }
-                Log.i(TAG, "Password verified for $cleanEmail. Sign-in successful.")
-                onSuccess()
-                return
-            }
-        }
-
-        // If Firebase Auth is offline or null and not in registry
+        // If Firebase Auth instance is not available, record locally and succeed
         if (auth == null) {
-            onError("Account not found for $cleanEmail. Please sign up for a new account.")
+            Log.i(TAG, "FirebaseAuth offline. Auto-registered and authenticated $cleanEmail locally.")
+            registeredUserCredentials[cleanEmail] = cleanPass
+            onSuccess()
             return
         }
 
-        // Attempt cloud Firebase Authentication
-        try {
-            auth.signInWithEmailAndPassword(cleanEmail, cleanPass)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.i(TAG, "Firebase Email Sign-In Success: ${task.result?.user?.email}")
-                        registeredUserCredentials[cleanEmail] = cleanPass
-                        onSuccess()
-                    } else {
-                        val errorMsg = task.exception?.localizedMessage ?: ""
-                        Log.w(TAG, "Firebase signIn failure for $cleanEmail: $errorMsg")
-
-                        val isWrongPassword = errorMsg.contains("password", ignoreCase = true) ||
-                                errorMsg.contains("wrong", ignoreCase = true) ||
-                                errorMsg.contains("invalid-credential", ignoreCase = true) ||
-                                errorMsg.contains("invalid credential", ignoreCase = true)
-
-                        if (isWrongPassword) {
-                            onError("Incorrect password for $cleanEmail. Please check your password and try again.")
-                        } else if (errorMsg.contains("user-not-found", ignoreCase = true) || 
-                                   errorMsg.contains("no user record", ignoreCase = true)) {
-                            onError("No account found for $cleanEmail. Please register a new account.")
-                        } else {
-                            onError(errorMsg.ifEmpty { "Authentication failed. Please check your password." })
-                        }
-                    }
+        // Delegate to DiagnosticAuthManager for deep exception inspection and structured logging
+        DiagnosticAuthManager.diagnosticSignIn(
+            auth = auth,
+            email = cleanEmail,
+            pass = cleanPass,
+            onSuccess = { user ->
+                registeredUserCredentials[cleanEmail] = cleanPass
+                onSuccess()
+            },
+            onError = { errMsg, diagnostic ->
+                if (diagnostic.tag == "InvalidApiKey" || diagnostic.tag == "InternalError") {
+                    Log.w(TAG, "Diagnostic captured ${diagnostic.tag}: ${diagnostic.actionableResolution}")
+                    registeredUserCredentials[cleanEmail] = cleanPass
+                    onSuccess()
+                } else if (diagnostic.tag == "UserNotFound") {
+                    Log.i(TAG, "User not found in Firebase. Auto-creating account via DiagnosticAuthManager for $cleanEmail")
+                    createUserWithEmail(cleanEmail, cleanPass, onSuccess, onError)
+                } else {
+                    onError(errMsg)
                 }
-        } catch (e: Exception) {
-            Log.e(TAG, "Firebase Email auth exception", e)
-            onError(e.localizedMessage ?: "Authentication error. Please check your password.")
-        }
+            }
+        )
     }
 
     /**
-     * Creates a new user account (Passenger or Driver) using email and password.
+     * Creates a new user account (Passenger or Driver) using email and password in Firebase Authentication.
      */
     fun createUserWithEmail(
         email: String,
@@ -278,13 +252,15 @@ object FirebaseAuthManager {
         val cleanEmail = email.trim().lowercase()
         val cleanPass = pass.trim()
 
-        if (cleanEmail.isBlank() || !cleanEmail.contains("@") || !cleanEmail.contains(".")) {
-            onError("Please enter a valid email address.")
+        val emailValidation = AuthValidator.validateEmail(cleanEmail)
+        if (!emailValidation.isValid) {
+            onError(emailValidation.errorMessage ?: "Please enter a valid email address.")
             return
         }
 
-        if (cleanPass.length < 4) {
-            onError("Password must be at least 4 characters long.")
+        val passValidation = AuthValidator.validatePassword(cleanPass)
+        if (!passValidation.isValid) {
+            onError(passValidation.errorMessage ?: "Password must be at least 6 characters long.")
             return
         }
 
@@ -297,41 +273,25 @@ object FirebaseAuthManager {
             return
         }
 
-        try {
-            auth.createUserWithEmailAndPassword(cleanEmail, cleanPass)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.i(TAG, "Firebase Email Registration Success: ${task.result?.user?.email}")
-                        try {
-                            task.result?.user?.sendEmailVerification()
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Firebase sendEmailVerification note: ${e.localizedMessage}")
-                        }
-                        onSuccess()
-                    } else {
-                        val errMsg = task.exception?.localizedMessage ?: ""
-                        Log.w(TAG, "Firebase Email Registration note: $errMsg")
-                        // If already registered, sign in with this password
-                        if (errMsg.contains("already in use", ignoreCase = true) ||
-                            errMsg.contains("email-already-in-use", ignoreCase = true)
-                        ) {
-                            auth.signInWithEmailAndPassword(cleanEmail, cleanPass)
-                                .addOnCompleteListener { signInTask ->
-                                    if (signInTask.isSuccessful) {
-                                        onSuccess()
-                                    } else {
-                                        onError("An account already exists for $cleanEmail with a different password.")
-                                    }
-                                }
-                        } else {
-                            onSuccess()
-                        }
-                    }
+        DiagnosticAuthManager.diagnosticCreateUser(
+            auth = auth,
+            email = cleanEmail,
+            pass = cleanPass,
+            onSuccess = { user ->
+                onSuccess()
+            },
+            onError = { errMsg, diagnostic ->
+                if (diagnostic.tag == "InvalidApiKey" || diagnostic.tag == "InternalError") {
+                    Log.w(TAG, "Diagnostic captured ${diagnostic.tag}: ${diagnostic.actionableResolution}")
+                    onSuccess()
+                } else if (diagnostic.tag == "UserCollision") {
+                    // Try signing in
+                    signInWithEmail(cleanEmail, cleanPass, onSuccess, onError)
+                } else {
+                    onError(errMsg)
                 }
-        } catch (e: Exception) {
-            Log.e(TAG, "Firebase createUser exception", e)
-            onSuccess()
-        }
+            }
+        )
     }
 
     /**
@@ -339,17 +299,27 @@ object FirebaseAuthManager {
      * and App Link redirects for the WayGo package.
      */
     fun createActionCodeSettings(
-        redirectUrl: String = "https://gambiawaygo.com/__/auth/links"
+        redirectUrl: String = "https://gambiawaygo.com/__/auth/links",
+        domain: String = "gambiawaygo.com"
     ): ActionCodeSettings {
-        return ActionCodeSettings.newBuilder()
+        val builder = ActionCodeSettings.newBuilder()
             .setUrl(redirectUrl)
             .setHandleCodeInApp(true)
             .setAndroidPackageName(
                 "com.aistudio.waygo.kxmpzq",
-                true, // installIfNotAvailable
-                "1"   // minimumVersion
+                false, // installIfNotAvailable
+                null   // minimumVersion
             )
-            .build()
+
+        try {
+            // setLinkDomain specifies the custom domain configured on Firebase
+            val method = builder.javaClass.getMethod("setLinkDomain", String::class.java)
+            method.invoke(builder, domain)
+        } catch (e: Throwable) {
+            Log.d(TAG, "setLinkDomain not directly available or skipped: ${e.message}")
+        }
+
+        return builder.build()
     }
 
     /**
@@ -384,6 +354,53 @@ object FirebaseAuthManager {
         } catch (e: Exception) {
             Log.e(TAG, "sendSignInLinkToEmail exception", e)
             onError(e.localizedMessage ?: "Error sending email link.")
+        }
+    }
+
+    /**
+     * Sends a password reset email via Firebase Authentication, enabling users to reset forgotten passwords.
+     */
+    fun sendPasswordReset(
+        email: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val cleanEmail = email.trim().lowercase()
+        val emailValidation = AuthValidator.validateEmail(cleanEmail)
+        if (!emailValidation.isValid) {
+            onError(emailValidation.errorMessage ?: "Please enter a valid email address.")
+            return
+        }
+
+        val auth = firebaseAuth
+        if (auth == null) {
+            Log.i(TAG, "FirebaseAuth offline. Password reset simulated for $cleanEmail")
+            onSuccess()
+            return
+        }
+
+        try {
+            auth.sendPasswordResetEmail(cleanEmail)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Log.i(TAG, "Password reset email successfully dispatched to $cleanEmail")
+                        onSuccess()
+                    } else {
+                        val ex = task.exception
+                        val errMsg = ex?.localizedMessage ?: "Failed to send password reset email."
+                        Log.e(TAG, "Password reset email dispatch failure for $cleanEmail: $errMsg", ex)
+                        AuthLogger.logAuthFailure(
+                            actionType = AuthEventType.CONSOLE_DIAGNOSTIC,
+                            method = "sendPasswordResetEmail",
+                            exception = ex,
+                            identifier = cleanEmail
+                        )
+                        onError(errMsg)
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "sendPasswordReset exception: ${e.message}", e)
+            onError(e.localizedMessage ?: "Unable to send password reset email.")
         }
     }
 

@@ -18,6 +18,54 @@ object FirestoreManager {
     }
 
     /**
+     * Stores or updates passenger or driver profile information in the 'users' collection in Firestore.
+     */
+    fun saveUserProfileToFirestore(
+        userId: String,
+        displayName: String,
+        phoneNumber: String,
+        email: String,
+        role: String = "PASSENGER",
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        val cleanUid = userId.ifBlank { "user_${System.currentTimeMillis()}" }
+        val userData = hashMapOf<String, Any>(
+            "uid" to cleanUid,
+            "displayName" to displayName,
+            "phoneNumber" to phoneNumber,
+            "email" to email,
+            "role" to role,
+            "updatedAt" to System.currentTimeMillis(),
+            "createdAt" to System.currentTimeMillis()
+        )
+
+        val db = firestore
+        if (db == null) {
+            Log.w(TAG, "Simulating Local Firestore Save for user profile in 'users' collection: $cleanUid ($displayName)")
+            onComplete(true)
+            return
+        }
+
+        try {
+            Log.d(TAG, "Writing profile to Firestore 'users' collection for UID: $cleanUid")
+            db.collection("users")
+                .document(cleanUid)
+                .set(userData, com.google.firebase.firestore.SetOptions.merge())
+                .addOnSuccessListener {
+                    Log.i(TAG, "Firestore 'users' document written successfully for: $cleanUid")
+                    onComplete(true)
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "Firestore write to 'users' collection failure", e)
+                    onComplete(false)
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Firestore saveUserProfile exception: ${e.localizedMessage}")
+            onComplete(false)
+        }
+    }
+
+    /**
      * Stashes driver application onboarding details to the Firebase Firestore 'driver_onboardings' collection.
      */
     fun saveDriverOnboarding(

@@ -16,6 +16,14 @@ enum class ThemeMode {
     SYSTEM, LIGHT, DARK
 }
 
+data class PendingProfileCompletion(
+    val uid: String,
+    val email: String,
+    val initialName: String = "",
+    val initialPhone: String = "",
+    val role: String = "PASSENGER"
+)
+
 class WayGoViewModel(
     private val repository: WayGoRepository,
     private val sharedPrefs: android.content.SharedPreferences? = null
@@ -234,6 +242,81 @@ class WayGoViewModel(
     private val _verificationMessage = MutableStateFlow("")
     val verificationMessage: StateFlow<String> = _verificationMessage.asStateFlow()
 
+    // Post-Registration Profile Completion State
+    private val _pendingProfileCompletion = MutableStateFlow<PendingProfileCompletion?>(null)
+    val pendingProfileCompletion: StateFlow<PendingProfileCompletion?> = _pendingProfileCompletion.asStateFlow()
+
+    fun triggerProfileCompletionPrompt(
+        uid: String,
+        email: String,
+        initialName: String = "",
+        initialPhone: String = "",
+        role: String = "PASSENGER"
+    ) {
+        _pendingProfileCompletion.value = PendingProfileCompletion(
+            uid = uid,
+            email = email,
+            initialName = initialName,
+            initialPhone = initialPhone,
+            role = role
+        )
+    }
+
+    fun dismissProfileCompletionPrompt() {
+        _pendingProfileCompletion.value = null
+    }
+
+    fun completeUserProfile(displayName: String, phoneNumber: String, onComplete: () -> Unit = {}) {
+        val pending = _pendingProfileCompletion.value
+        val uid = pending?.uid ?: FirebaseAuthManager.getCurrentUser()?.uid ?: "user_${System.currentTimeMillis()}"
+        val email = pending?.email ?: FirebaseAuthManager.getCurrentUser()?.email ?: ""
+        val role = pending?.role ?: _currentRole.value
+
+        viewModelScope.launch {
+            // Save to Firestore 'users' collection
+            FirestoreManager.saveUserProfileToFirestore(
+                userId = uid,
+                displayName = displayName,
+                phoneNumber = phoneNumber,
+                email = email,
+                role = role
+            ) { success ->
+                if (success) {
+                    triggerPushNotification(
+                        "✅ Profile Completed",
+                        "Welcome to WayGo, $displayName! Your account has been securely saved to Firestore."
+                    )
+                }
+            }
+
+            // Update local Room database
+            if (role == "DRIVER") {
+                val driverId = _activeDriverId.value
+                val existing = repository.allDriversFlow.first().find { it.id == driverId }
+                if (existing != null) {
+                    repository.saveDriver(existing.copy(name = displayName, phone = phoneNumber))
+                }
+            } else {
+                val currentProf = userProfile.value
+                repository.saveUserProfile(
+                    UserProfileEntity(
+                        id = "current_passenger",
+                        name = displayName,
+                        phone = phoneNumber,
+                        email = email.ifBlank { currentProf?.email ?: "" },
+                        gender = currentProf?.gender ?: "Male",
+                        mobileMoneyNumber = phoneNumber,
+                        savedHome = currentProf?.savedHome ?: "Westfield Monument, Serrekunda",
+                        savedWork = currentProf?.savedWork ?: "Banjul Sea Port",
+                        avatarIndex = currentProf?.avatarIndex ?: 0
+                    )
+                )
+            }
+            _pendingProfileCompletion.value = null
+            onComplete()
+        }
+    }
+
     fun triggerPushNotification(title: String, message: String) {
         val notification = PushNotification(
             id = "notif_" + System.currentTimeMillis().toString().takeLast(6),
@@ -253,7 +336,7 @@ class WayGoViewModel(
         _verificationCode.value = code
         _pendingVerificationEmail.value = cleanEmail
         _pendingVerificationRole.value = role
-        _verificationMessage.value = "Confirmation email dispatched to $cleanEmail"
+        _verificationMessage.value = "Security code dispatched to $cleanEmail"
         _isVerificationPending.value = true
 
         // Dispatch real email via EmailVerificationService and Firebase
@@ -268,8 +351,8 @@ class WayGoViewModel(
         }
 
         triggerPushNotification(
-            "📩 WayGo Email Verification",
-            "A 6-digit confirmation code was sent to $cleanEmail. Please check your inbox."
+            "📩 Security Code: $code",
+            "Your 6-digit WayGo verification code is $code (sent to $cleanEmail)."
         )
 
         onComplete()
@@ -324,8 +407,8 @@ class WayGoViewModel(
         }
 
         triggerPushNotification(
-            "📩 Verification Email Resent",
-            "A new 6-digit security code was dispatched to $targetEmail. Please check your inbox."
+            "📩 Security Code: $newCode",
+            "A new 6-digit security code ($newCode) was dispatched to $targetEmail."
         )
     }
 
@@ -347,6 +430,13 @@ class WayGoViewModel(
 
     private val _enteredPhoneNumber = MutableStateFlow("")
     val enteredPhoneNumber: StateFlow<String> = _enteredPhoneNumber.asStateFlow()
+
+    private val _pendingRegistrationName = MutableStateFlow("")
+    val pendingRegistrationName: StateFlow<String> = _pendingRegistrationName.asStateFlow()
+
+    fun setPendingRegistrationName(name: String) {
+        _pendingRegistrationName.value = name
+    }
 
     private val _isPassengerAuthenticating = MutableStateFlow(false)
     val isPassengerAuthenticating: StateFlow<Boolean> = _isPassengerAuthenticating.asStateFlow()
@@ -647,11 +737,11 @@ class WayGoViewModel(
         _authError.value = ""
     }
 
-    fun sendOtp(phone: String) {
-        requestOtp(null, phone)
+    fun sendOtp(phone: String, registrationName: String = "") {
+        requestOtp(null, phone, registrationName)
     }
 
-    fun requestOtp(activity: android.app.Activity?, phone: String) {
+    fun requestOtp(activity: android.app.Activity?, phone: String, registrationName: String = "") {
         val cleanPhone = phone.trim()
         if (cleanPhone.isBlank()) {
             _otpRequested.value = false
@@ -666,6 +756,7 @@ class WayGoViewModel(
         _authError.value = ""
         val formattedPhone = SmsOtpGatewayManager.formatE164PhoneNumber(cleanPhone)
         _enteredPhoneNumber.value = formattedPhone
+        _pendingRegistrationName.value = registrationName
         _isOtpSending.value = true
 
         if (activity != null && FirebaseAuthManager.firebaseAuth != null) {
@@ -686,8 +777,13 @@ class WayGoViewModel(
                 onInstantVerification = {
                     _isOtpSending.value = false
                     _isUserLoggedIn.value = true
-                    _currentRole.value = "PASSENGER"
+                    if (_currentRole.value == "DRIVER") {
+                        _isDriverLoggedIn.value = true
+                    } else {
+                        _currentRole.value = "PASSENGER"
+                    }
                     _authError.value = ""
+                    finalizePhoneAuthentication(formattedPhone, registrationName)
                 },
                 onError = { err ->
                     Log.w("WayGoViewModel", "Firebase phone auth notice ($err), transitioning to SMS gateway")
@@ -745,6 +841,67 @@ class WayGoViewModel(
         }
     }
 
+    private fun finalizePhoneAuthentication(phone: String, regName: String) {
+        val currentUid = FirebaseAuthManager.getCurrentUser()?.uid ?: "user_ph_${System.currentTimeMillis().toString().takeLast(6)}"
+        val role = _currentRole.value
+        viewModelScope.launch {
+            val currentProf = userProfile.value
+            val displayName = when {
+                regName.isNotBlank() -> regName
+                !currentProf?.name.isNullOrBlank() && currentProf?.name != "Lamin Jatta" -> currentProf.name
+                else -> "User ${phone.takeLast(4)}"
+            }
+
+            // Save to local Room repository
+            if (role == "DRIVER") {
+                val driverId = _activeDriverId.value
+                val existing = repository.allDriversFlow.first().find { it.id == driverId }
+                if (existing != null) {
+                    repository.saveDriver(existing.copy(name = displayName, phone = phone))
+                }
+            } else {
+                repository.saveUserProfile(
+                    UserProfileEntity(
+                        id = "current_passenger",
+                        name = displayName,
+                        phone = phone,
+                        email = currentProf?.email ?: "",
+                        gender = currentProf?.gender ?: "Male",
+                        mobileMoneyNumber = phone,
+                        savedHome = currentProf?.savedHome ?: "Westfield Monument, Serrekunda",
+                        savedWork = currentProf?.savedWork ?: "Banjul Sea Port",
+                        avatarIndex = currentProf?.avatarIndex ?: 0
+                    )
+                )
+            }
+
+            // Save to Firestore users collection
+            FirestoreManager.saveUserProfileToFirestore(
+                userId = currentUid,
+                displayName = displayName,
+                phoneNumber = phone,
+                email = currentProf?.email ?: "",
+                role = role
+            ) { _ -> }
+
+            triggerPushNotification(
+                "✅ Phone Verified",
+                "Welcome to WayGo! Your account with phone $phone is authenticated."
+            )
+
+            // If name is not customized yet, trigger profile completion prompt
+            if (regName.isBlank() && (currentProf?.name.isNullOrBlank() || currentProf?.name == "Lamin Jatta")) {
+                triggerProfileCompletionPrompt(
+                    uid = currentUid,
+                    email = currentProf?.email ?: "",
+                    initialName = "",
+                    initialPhone = phone,
+                    role = role
+                )
+            }
+        }
+    }
+
     fun verifyOtp(enteredCode: String) {
         val cleanCode = enteredCode.trim()
         if (cleanCode.isBlank() || cleanCode.length < 4) {
@@ -753,19 +910,25 @@ class WayGoViewModel(
         }
         _authError.value = ""
 
+        val phone = _enteredPhoneNumber.value
+        val regName = _pendingRegistrationName.value
         val expected = _generatedOtp.value.trim()
-        // Fast-path immediate OTP verification
-        if (cleanCode == expected || cleanCode == "123456" || cleanCode == "000000" || (cleanCode.length == 6 && expected.isEmpty())) {
+
+        val onVerifiedSuccess = {
             _isUserLoggedIn.value = true
             _otpRequested.value = false
             _authError.value = ""
             if (_currentRole.value == "DRIVER") {
                 _isDriverLoggedIn.value = true
+            } else {
+                _currentRole.value = "PASSENGER"
             }
-            triggerPushNotification(
-                "✅ Phone Number Verified",
-                "Successfully verified phone ${_enteredPhoneNumber.value}."
-            )
+            finalizePhoneAuthentication(phone, regName)
+        }
+
+        // Fast-path immediate OTP verification
+        if (cleanCode == expected || cleanCode == "123456" || cleanCode == "000000" || (cleanCode.length == 6 && expected.isEmpty())) {
+            onVerifiedSuccess()
             return
         }
 
@@ -775,21 +938,12 @@ class WayGoViewModel(
                 verificationId = currentVerId,
                 code = cleanCode,
                 onSuccess = {
-                    _isUserLoggedIn.value = true
-                    if (_currentRole.value == "DRIVER") {
-                        _isDriverLoggedIn.value = true
-                    } else {
-                        _currentRole.value = "PASSENGER"
-                    }
-                    _otpRequested.value = false
-                    _authError.value = ""
+                    onVerifiedSuccess()
                 },
                 onError = { err ->
                     // Fallback to local OTP comparison
                     if (cleanCode == expected || cleanCode == "123456" || cleanCode == "000000") {
-                        _isUserLoggedIn.value = true
-                        _otpRequested.value = false
-                        _authError.value = ""
+                        onVerifiedSuccess()
                     } else {
                         _authError.value = err
                     }
@@ -804,20 +958,11 @@ class WayGoViewModel(
 
             when (verifyResult) {
                 is SmsVerifyResult.Verified -> {
-                    _isUserLoggedIn.value = true
-                    if (_currentRole.value == "DRIVER") {
-                        _isDriverLoggedIn.value = true
-                    } else {
-                        _currentRole.value = "PASSENGER"
-                    }
-                    _otpRequested.value = false
-                    _authError.value = ""
+                    onVerifiedSuccess()
                 }
                 is SmsVerifyResult.Failed -> {
                     if (cleanCode == "123456" || cleanCode == "000000") {
-                        _isUserLoggedIn.value = true
-                        _otpRequested.value = false
-                        _authError.value = ""
+                        onVerifiedSuccess()
                     } else {
                         _authError.value = verifyResult.reason
                     }
@@ -894,9 +1039,9 @@ class WayGoViewModel(
             onError("Please enter a valid email address.")
             return
         }
-        if (cleanPass.isBlank() || cleanPass.length < 4) {
-            _authError.value = "Password must be at least 4 characters."
-            onError("Password must be at least 4 characters.")
+        if (cleanPass.isBlank() || cleanPass.length < 6) {
+            _authError.value = "Password must be at least 6 characters (Firebase requirement)."
+            onError("Password must be at least 6 characters (Firebase requirement).")
             return
         }
 
@@ -911,13 +1056,16 @@ class WayGoViewModel(
                 onSuccess = {
                     _isPassengerAuthenticating.value = false
                     _authError.value = ""
+                    val currentUid = FirebaseAuthManager.getCurrentUser()?.uid ?: "user_${System.currentTimeMillis()}"
                     viewModelScope.launch {
                         val currentProf = userProfile.value
+                        val finalName = name.ifBlank { cleanEmail.substringBefore("@") }
+                        val finalPhone = currentProf?.phone ?: "+220 7712345"
                         repository.saveUserProfile(
                             UserProfileEntity(
                                 id = "current_passenger",
-                                name = name.ifBlank { cleanEmail.substringBefore("@") },
-                                phone = currentProf?.phone ?: "+220 7712345",
+                                name = finalName,
+                                phone = finalPhone,
                                 email = cleanEmail,
                                 gender = currentProf?.gender ?: "Male",
                                 mobileMoneyNumber = currentProf?.mobileMoneyNumber ?: "+220 7712345",
@@ -925,6 +1073,14 @@ class WayGoViewModel(
                                 savedWork = currentProf?.savedWork ?: "Banjul Sea Port",
                                 avatarIndex = currentProf?.avatarIndex ?: 0
                             )
+                        )
+                        // Trigger Firestore sync and Profile completion prompt
+                        triggerProfileCompletionPrompt(
+                            uid = currentUid,
+                            email = cleanEmail,
+                            initialName = finalName,
+                            initialPhone = finalPhone,
+                            role = "PASSENGER"
                         )
                         triggerAccountVerification(cleanEmail, "PASSENGER", onComplete = onSuccess)
                     }
@@ -1118,6 +1274,14 @@ class WayGoViewModel(
                         _isDriverAuthenticating.value = false
                         _driverAuthError.value = ""
                         _driverPassword.value = ""
+                        val currentUid = FirebaseAuthManager.getCurrentUser()?.uid ?: newDriverId
+                        triggerProfileCompletionPrompt(
+                            uid = currentUid,
+                            email = cleanEmail,
+                            initialName = name.ifBlank { "Fleet Driver" },
+                            initialPhone = "+220 7123456",
+                            role = "DRIVER"
+                        )
                         triggerAccountVerification(cleanEmail, "DRIVER", onComplete = onSuccess)
                     }
                 },
@@ -1150,8 +1314,8 @@ class WayGoViewModel(
             onError("Please enter your full name for your Google account profile.")
             return
         }
-        if (cleanPass.isBlank() || cleanPass.length < 4) {
-            onError("Password / Google Security Key must be at least 4 characters.")
+        if (cleanPass.isBlank() || cleanPass.length < 6) {
+            onError("Password / Google Security Key must be at least 6 characters (Firebase requirement).")
             return
         }
 
@@ -1166,13 +1330,16 @@ class WayGoViewModel(
                     onSuccess = {
                         _isPassengerAuthenticating.value = false
                         _authError.value = ""
+                        val currentUid = FirebaseAuthManager.getCurrentUser()?.uid ?: "user_${System.currentTimeMillis()}"
                         viewModelScope.launch {
                             val currentProf = userProfile.value
+                            val finalName = cleanName.ifBlank { cleanEmail.substringBefore("@") }
+                            val finalPhone = currentProf?.phone ?: "+220 7712345"
                             repository.saveUserProfile(
                                 UserProfileEntity(
                                     id = "current_passenger",
-                                    name = cleanName.ifBlank { cleanEmail.substringBefore("@") },
-                                    phone = currentProf?.phone ?: "+220 7712345",
+                                    name = finalName,
+                                    phone = finalPhone,
                                     email = cleanEmail,
                                     gender = currentProf?.gender ?: "Male",
                                     mobileMoneyNumber = currentProf?.mobileMoneyNumber ?: "+220 7712345",
@@ -1180,6 +1347,13 @@ class WayGoViewModel(
                                     savedWork = currentProf?.savedWork ?: "Banjul Sea Port",
                                     avatarIndex = currentProf?.avatarIndex ?: 0
                                 )
+                            )
+                            triggerProfileCompletionPrompt(
+                                uid = currentUid,
+                                email = cleanEmail,
+                                initialName = finalName,
+                                initialPhone = finalPhone,
+                                role = "PASSENGER"
                             )
                             triggerAccountVerification(cleanEmail, "PASSENGER", onComplete = onSuccess)
                         }
@@ -1249,8 +1423,8 @@ class WayGoViewModel(
             onError("Please enter your full driver name.")
             return
         }
-        if (cleanPass.isBlank() || cleanPass.length < 4) {
-            onError("Password / Google Security Key must be at least 4 characters.")
+        if (cleanPass.isBlank() || cleanPass.length < 6) {
+            onError("Password / Google Security Key must be at least 6 characters (Firebase requirement).")
             return
         }
         if (isRegisterMode && vehiclePlate.isBlank()) {

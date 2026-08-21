@@ -1,8 +1,11 @@
 package com.example
 
 import android.app.Application
+import android.util.Log
 import com.example.data.WayGoDatabase
 import com.example.data.WayGoRepository
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 
@@ -14,7 +17,17 @@ class WayGoApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        initializeFirebase()
         createNotificationChannel()
+    }
+
+    private fun initializeFirebase() {
+        try {
+            com.example.data.DiagnosticAuthManager.initialize(this)
+            com.example.data.AuthLogger.startObserving(this)
+        } catch (e: Exception) {
+            Log.w("WayGoApplication", "FirebaseApp initialization status: ${e.localizedMessage}")
+        }
     }
 
     override fun onTrimMemory(level: Int) {

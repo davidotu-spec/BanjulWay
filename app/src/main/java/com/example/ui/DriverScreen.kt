@@ -92,6 +92,7 @@ fun DriverScreen(
             isOtpSending = isOtpSending,
             smsGatewayStatus = smsGatewayStatus,
             onRequestOtp = { ph -> viewModel.requestOtp(activity, ph) },
+            onRequestOtpWithProfile = { ph, nm -> viewModel.requestOtp(activity, ph, nm) },
             onVerifyOtp = { code -> viewModel.verifyOtp(code) },
             onEmailChange = { viewModel.setDriverEmail(it) },
             onPassChange = { viewModel.setDriverPassword(it) },
@@ -3349,6 +3350,7 @@ fun DriverAuthView(
     isOtpSending: Boolean = false,
     smsGatewayStatus: String = "",
     onRequestOtp: (String) -> Unit = {},
+    onRequestOtpWithProfile: (String, String) -> Unit = { p, _ -> onRequestOtp(p) },
     onVerifyOtp: (String) -> Unit = {},
     onEmailChange: (String) -> Unit,
     onPassChange: (String) -> Unit,
@@ -3403,6 +3405,7 @@ fun DriverAuthView(
             activeRole = "DRIVER",
             onSelectRole = onSelectRole,
             isDark = isDark,
+            isAuthenticating = isAuthenticating,
             onGoogleAuthClick = { showGoogleAuthDialog = true },
             onAppleAuthClick = {
                 onGoogleDriverAuth("apple.driver@icloud.com", "Apple Driver", "applePass123", "Mercedes Sedan", "BJL 8844 X", "GAM-DL-9082", false) { _ -> }
@@ -3419,6 +3422,9 @@ fun DriverAuthView(
             },
             onRequestOtp = { ph ->
                 onRequestOtp(ph)
+            },
+            onRequestOtpWithProfile = { ph, nm ->
+                onRequestOtpWithProfile(ph, nm)
             },
             onVerifyOtp = { code ->
                 onVerifyOtp(code)

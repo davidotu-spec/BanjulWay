@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.AccountVerificationDialog
 import com.example.ui.AdminScreen
+import com.example.ui.ProfileCompletionDialog
 import com.example.ui.WayGoViewModel
 import com.example.ui.WayGoViewModelFactory
 import com.example.ui.DriverScreen
@@ -120,6 +121,7 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
     val pendingVerificationRole by viewModel.pendingVerificationRole.collectAsState()
     val verificationCode by viewModel.verificationCode.collectAsState()
     val verificationMessage by viewModel.verificationMessage.collectAsState()
+    val pendingProfileCompletion by viewModel.pendingProfileCompletion.collectAsState()
 
     if (isVerificationPending) {
         AccountVerificationDialog(
@@ -136,6 +138,21 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
             onDismiss = {
                 viewModel.cancelAccountVerification()
             }
+        )
+    }
+
+    pendingProfileCompletion?.let { pending ->
+        ProfileCompletionDialog(
+            userId = pending.uid,
+            userEmail = pending.email,
+            initialDisplayName = pending.initialName,
+            initialPhoneNumber = pending.initialPhone,
+            userRole = pending.role,
+            isDark = false,
+            onProfileCompleted = { name, phone ->
+                viewModel.completeUserProfile(name, phone)
+            },
+            onDismiss = { viewModel.dismissProfileCompletionPrompt() }
         )
     }
 

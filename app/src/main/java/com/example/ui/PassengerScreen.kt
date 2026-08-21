@@ -128,6 +128,7 @@ fun PassengerScreen(
     val smsGatewayStatus by viewModel.smsGatewayStatus.collectAsState()
     val isRealSmsSent by viewModel.isRealSmsSent.collectAsState()
     val isOtpSending by viewModel.isOtpSending.collectAsState()
+    val isPassengerAuthenticating by viewModel.isPassengerAuthenticating.collectAsState()
     val isAdminLoggedIn by viewModel.isAdminLoggedIn.collectAsState()
     val isSecretAdminUnlocked by viewModel.isSecretAdminUnlocked.collectAsState()
 
@@ -139,10 +140,12 @@ fun PassengerScreen(
             otpRequested = otpRequested,
             generatedOtp = generatedOtp,
             authError = authError,
+            isAuthenticating = isPassengerAuthenticating,
             smsGatewayStatus = smsGatewayStatus,
             isRealSmsSent = isRealSmsSent,
             isOtpSending = isOtpSending,
             onRequestOtp = { viewModel.requestOtp(activity, it) },
+            onRequestOtpWithProfile = { ph, nm -> viewModel.requestOtp(activity, ph, nm) },
             onVerifyOtp = { viewModel.verifyOtp(it) },
             onEmailLogin = { email, pass -> viewModel.loginPassengerWithEmail(email, pass) },
             onEmailRegister = { email, pass, name, errCb ->
@@ -479,10 +482,12 @@ fun PassengerAuthView(
     otpRequested: Boolean = false,
     generatedOtp: String = "",
     authError: String = "",
+    isAuthenticating: Boolean = false,
     smsGatewayStatus: String = "",
     isRealSmsSent: Boolean = false,
     isOtpSending: Boolean = false,
     onRequestOtp: (String) -> Unit = {},
+    onRequestOtpWithProfile: (String, String) -> Unit = { p, _ -> onRequestOtp(p) },
     onVerifyOtp: (String) -> Unit = {},
     onEmailLogin: (String, String) -> Unit = { _, _ -> },
     onEmailRegister: (String, String, String, (String) -> Unit) -> Unit = { _, _, _, _ -> },
@@ -545,6 +550,7 @@ fun PassengerAuthView(
             activeRole = "PASSENGER",
             onSelectRole = onSelectRole,
             isDark = false,
+            isAuthenticating = isAuthenticating,
             onGoogleAuthClick = { showGoogleAuthDialog = true },
             onAppleAuthClick = {
                 // Simulate Apple OAuth Sign in
@@ -553,6 +559,7 @@ fun PassengerAuthView(
             onEmailLoginSubmit = { em, pw -> onEmailLogin(em, pw) },
             onEmailRegisterSubmit = { em, pw, nm, _, _, _, errCb -> onEmailRegister(em, pw, nm, errCb) },
             onRequestOtp = { ph -> onRequestOtp(ph) },
+            onRequestOtpWithProfile = { ph, nm -> onRequestOtpWithProfile(ph, nm) },
             onVerifyOtp = { code -> onVerifyOtp(code) },
             otpRequested = otpRequested,
             isOtpSending = isOtpSending,

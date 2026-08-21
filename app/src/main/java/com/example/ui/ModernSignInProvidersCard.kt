@@ -36,6 +36,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
+import android.widget.Toast
+import com.example.utils.AuthValidator
+import com.example.utils.PasswordStrength
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 
@@ -45,11 +48,13 @@ fun ModernSignInProvidersCard(
     activeRole: String,
     onSelectRole: (String) -> Unit,
     isDark: Boolean = false,
+    isAuthenticating: Boolean = false,
     onGoogleAuthClick: () -> Unit,
     onAppleAuthClick: () -> Unit = {},
     onEmailLoginSubmit: (email: String, pass: String) -> Unit,
     onEmailRegisterSubmit: (email: String, pass: String, name: String, vehicleType: String, vehiclePlate: String, licenseNum: String, onError: (String) -> Unit) -> Unit = { _, _, _, _, _, _, _ -> },
     onRequestOtp: (String) -> Unit,
+    onRequestOtpWithProfile: (phone: String, name: String) -> Unit = { p, _ -> onRequestOtp(p) },
     onVerifyOtp: (String) -> Unit,
     otpRequested: Boolean = false,
     isOtpSending: Boolean = false,
@@ -67,6 +72,9 @@ fun ModernSignInProvidersCard(
     var showCountryPicker by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+
     val smsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ ->
@@ -88,6 +96,8 @@ fun ModernSignInProvidersCard(
 
     var isEmailModeExpanded by remember { mutableStateOf(false) }
     var isRegisterMode by remember { mutableStateOf(false) }
+    var isPhoneRegisterMode by remember { mutableStateOf(false) }
+    var phoneRegisterName by remember { mutableStateOf("") }
     var emailInput by remember { mutableStateOf("") }
     var passwordInput by remember { mutableStateOf("") }
     var nameInput by remember { mutableStateOf("") }
@@ -96,7 +106,9 @@ fun ModernSignInProvidersCard(
     var licenseNumInput by remember { mutableStateOf("") }
 
     var passwordVisible by remember { mutableStateOf(false) }
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
 
     val cardBg = if (isDark) Color(0xFF1E293B) else PureWhite
     val textPrimary = if (isDark) PureWhite else BrandBlueDark
@@ -139,7 +151,11 @@ fun ModernSignInProvidersCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
-                    .clickable { onAppleAuthClick() }
+                    .clickable {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        onAppleAuthClick()
+                    }
                     .testTag("provider_apple_btn")
             ) {
                 Row(
@@ -168,7 +184,11 @@ fun ModernSignInProvidersCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
-                    .clickable { onGoogleAuthClick() }
+                    .clickable {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        onGoogleAuthClick()
+                    }
                     .testTag("provider_google_btn")
             ) {
                 Row(
@@ -238,6 +258,14 @@ fun ModernSignInProvidersCard(
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
+                // Real-time validation results
+                val emailValidation = remember(emailInput) {
+                    if (emailInput.isNotBlank()) AuthValidator.validateEmail(emailInput) else null
+                }
+                val passwordValidation = remember(passwordInput) {
+                    if (passwordInput.isNotBlank()) AuthValidator.validatePassword(passwordInput) else null
+                }
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -257,7 +285,10 @@ fun ModernSignInProvidersCard(
                             fontWeight = FontWeight.Bold,
                             color = textPrimary
                         )
-                        TextButton(onClick = { isRegisterMode = !isRegisterMode }) {
+                        TextButton(onClick = {
+                            isRegisterMode = !isRegisterMode
+                            localError = ""
+                        }) {
                             Text(
                                 text = if (isRegisterMode) "Sign In instead" else "Register",
                                 fontSize = 12.sp,
@@ -272,7 +303,10 @@ fun ModernSignInProvidersCard(
                     if (isRegisterMode) {
                         OutlinedTextField(
                             value = nameInput,
-                            onValueChange = { nameInput = it },
+                            onValueChange = {
+                                nameInput = it
+                                if (localError.isNotBlank()) localError = ""
+                            },
                             label = { Text("Full Name", color = textSecondary) },
                             placeholder = { Text("e.g. Lamin Touray", color = textSecondary.copy(alpha = 0.6f)) },
                             leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = BrandBluePrimary) },
@@ -301,12 +335,31 @@ fun ModernSignInProvidersCard(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
+                    // Email Address Field with real-time format indicator
                     OutlinedTextField(
                         value = emailInput,
-                        onValueChange = { emailInput = it },
+                        onValueChange = {
+                            emailInput = it
+                            if (localError.isNotBlank()) localError = ""
+                        },
                         label = { Text("Email Address", color = textSecondary) },
                         placeholder = { Text("e.g. user@gmail.com", color = textSecondary.copy(alpha = 0.6f)) },
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = BrandBluePrimary) },
+                        trailingIcon = {
+                            if (emailInput.isNotBlank()) {
+                                val isValid = emailValidation?.isValid == true
+                                Icon(
+                                    imageVector = if (isValid) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                    contentDescription = if (isValid) "Valid Email" else "Invalid Email",
+                                    tint = if (isValid) Color(0xFF10B981) else Color(0xFFEF4444),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        },
+                        isError = emailInput.isNotBlank() && emailValidation?.isValid == false,
+                        supportingText = if (emailInput.isNotBlank() && emailValidation?.isValid == false) {
+                            { Text(emailValidation.errorMessage ?: "Invalid email format", color = Color(0xFFEF4444), fontSize = 11.sp) }
+                        } else null,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         textStyle = androidx.compose.ui.text.TextStyle(
@@ -317,6 +370,7 @@ fun ModernSignInProvidersCard(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = BrandBluePrimary,
                             unfocusedBorderColor = borderCol,
+                            errorBorderColor = Color(0xFFEF4444),
                             focusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
                             unfocusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
                             focusedTextColor = textPrimary,
@@ -333,9 +387,13 @@ fun ModernSignInProvidersCard(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    // Password Field
                     OutlinedTextField(
                         value = passwordInput,
-                        onValueChange = { passwordInput = it },
+                        onValueChange = {
+                            passwordInput = it
+                            if (localError.isNotBlank()) localError = ""
+                        },
                         label = { Text("Password", color = textSecondary) },
                         placeholder = { Text("At least 6 characters", color = textSecondary.copy(alpha = 0.6f)) },
                         leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = BrandBluePrimary) },
@@ -351,6 +409,7 @@ fun ModernSignInProvidersCard(
                         visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        isError = isRegisterMode && passwordInput.isNotBlank() && passwordValidation?.isValid == false,
                         textStyle = androidx.compose.ui.text.TextStyle(
                             color = textPrimary,
                             fontSize = 15.sp,
@@ -359,6 +418,7 @@ fun ModernSignInProvidersCard(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = BrandBluePrimary,
                             unfocusedBorderColor = borderCol,
+                            errorBorderColor = Color(0xFFEF4444),
                             focusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
                             unfocusedContainerColor = if (isDark) Color(0xFF1E293B) else PureWhite,
                             focusedTextColor = textPrimary,
@@ -372,6 +432,91 @@ fun ModernSignInProvidersCard(
                             .testTag("password_input_field"),
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    // Forgot Password Button in Login Mode
+                    if (!isRegisterMode) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = { showForgotPasswordDialog = true },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier.testTag("email_forgot_password_btn")
+                            ) {
+                                Text(
+                                    text = "Forgot Password?",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = BrandBluePrimary
+                                )
+                            }
+                        }
+                    }
+
+                    // Registration Password Requirements and Strength Indicator
+                    if (isRegisterMode && passwordInput.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val strength = passwordValidation?.strength ?: PasswordStrength.TOO_SHORT
+                        val strengthColor = when (strength) {
+                            PasswordStrength.TOO_SHORT -> Color(0xFFEF4444)
+                            PasswordStrength.WEAK -> Color(0xFFF97316)
+                            PasswordStrength.MEDIUM -> Color(0xFFEAB308)
+                            PasswordStrength.STRONG -> Color(0xFF10B981)
+                        }
+                        val strengthProgress = when (strength) {
+                            PasswordStrength.TOO_SHORT -> 0.25f
+                            PasswordStrength.WEAK -> 0.5f
+                            PasswordStrength.MEDIUM -> 0.75f
+                            PasswordStrength.STRONG -> 1.0f
+                        }
+
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Password Strength: ${strength.label}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = strengthColor
+                                )
+                                Text(
+                                    text = "${passwordInput.length}/6+ chars",
+                                    fontSize = 10.5.sp,
+                                    color = if (passwordInput.length >= 6) Color(0xFF10B981) else Color(0xFFEF4444)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(3.dp))
+                            LinearProgressIndicator(
+                                progress = { strengthProgress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = strengthColor,
+                                trackColor = borderCol
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            // Checklist items
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                val minLenMet = passwordValidation?.hasMinLength == true
+                                val letterMet = passwordValidation?.hasLetter == true
+                                val digitMet = passwordValidation?.hasDigitOrSymbol == true
+
+                                RequirementPill(label = "6+ Chars", isMet = minLenMet, isDark = isDark)
+                                RequirementPill(label = "Letters", isMet = letterMet, isDark = isDark)
+                                RequirementPill(label = "Numbers/Symbols", isMet = digitMet, isDark = isDark)
+                            }
+                        }
+                    }
 
                     if (userRole == "DRIVER" && isRegisterMode) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -428,41 +573,130 @@ fun ModernSignInProvidersCard(
                         )
                     }
 
+                    // Visible UI Feedback for errors
+                    AnimatedVisibility(visible = localError.isNotBlank()) {
+                        Column {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFEF4444).copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = "Error",
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = localError,
+                                        color = Color(0xFFEF4444),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Button(
                         onClick = {
                             localError = ""
-                            if (emailInput.isBlank() || passwordInput.isBlank()) {
-                                localError = "Please enter email and password."
-                                return@Button
-                            }
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+
                             if (isRegisterMode) {
+                                // Explicit Pre-Firebase Validation Layer
+                                val validation = AuthValidator.validateSignUp(
+                                    email = emailInput,
+                                    password = passwordInput,
+                                    name = nameInput,
+                                    isDriver = (userRole == "DRIVER"),
+                                    vehiclePlate = vehiclePlateInput
+                                )
+
+                                if (!validation.isValid) {
+                                    val err = validation.errorMessage ?: "Please verify all registration fields."
+                                    localError = err
+                                    Toast.makeText(context, "⚠️ $err", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+
+                                isSubmitting = true
+                                Toast.makeText(context, "Creating account with Firebase...", Toast.LENGTH_SHORT).show()
                                 onEmailRegisterSubmit(
-                                    emailInput,
-                                    passwordInput,
-                                    nameInput,
-                                    vehicleTypeInput,
-                                    vehiclePlateInput,
-                                    licenseNumInput
-                                ) { err -> localError = err }
+                                    emailInput.trim(),
+                                    passwordInput.trim(),
+                                    nameInput.trim(),
+                                    vehicleTypeInput.trim(),
+                                    vehiclePlateInput.trim(),
+                                    licenseNumInput.trim()
+                                ) { err ->
+                                    isSubmitting = false
+                                    localError = err
+                                    Toast.makeText(context, "⚠️ $err", Toast.LENGTH_LONG).show()
+                                }
                             } else {
-                                onEmailLoginSubmit(emailInput, passwordInput)
+                                // Pre-Firebase Login Validation
+                                val emailCheck = AuthValidator.validateEmail(emailInput)
+                                if (!emailCheck.isValid) {
+                                    val err = emailCheck.errorMessage ?: "Please enter a valid email address."
+                                    localError = err
+                                    Toast.makeText(context, "⚠️ $err", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+
+                                if (passwordInput.isBlank()) {
+                                    val err = "Please enter your password."
+                                    localError = err
+                                    Toast.makeText(context, "⚠️ $err", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+
+                                isSubmitting = true
+                                onEmailLoginSubmit(emailInput.trim(), passwordInput.trim())
                             }
                         },
+                        enabled = !isSubmitting && !isAuthenticating,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(46.dp)
                             .testTag("email_submit_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BrandBluePrimary,
+                            disabledContainerColor = BrandBluePrimary.copy(alpha = 0.5f)
+                        ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text(
-                            text = if (isRegisterMode) "Register & Sign In" else "Sign In with Email",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PureWhite
-                        )
+                        if (isSubmitting || isAuthenticating) {
+                            CircularProgressIndicator(
+                                color = PureWhite,
+                                strokeWidth = 2.5.dp,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isRegisterMode) "Creating Account..." else "Signing In...",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite
+                            )
+                        } else {
+                            Text(
+                                text = if (isRegisterMode) "Register & Sign In" else "Sign In with Email",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite
+                            )
+                        }
                     }
                 }
             }
@@ -486,19 +720,112 @@ fun ModernSignInProvidersCard(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // BOTTOM PHONE SECTION ("Enter your number")
+            // BOTTOM PHONE SECTION: Firebase Phone Authentication (Login & Registration)
             Column(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = "Enter your number",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimary,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = if (isPhoneRegisterMode) "Register with Phone" else "Sign in with Phone",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textPrimary
+                        )
+                        Text(
+                            text = "Firebase SMS Verification",
+                            fontSize = 12.sp,
+                            color = BrandBluePrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    if (!otpRequested) {
+                        // Switch between Login and Register tabs
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(inputBg)
+                                .padding(3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(if (!isPhoneRegisterMode) BrandBluePrimary else Color.Transparent)
+                                    .clickable {
+                                        isPhoneRegisterMode = false
+                                        localError = ""
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                                    .testTag("phone_auth_tab_login"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Sign In",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (!isPhoneRegisterMode) PureWhite else textSecondary
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(if (isPhoneRegisterMode) BrandBluePrimary else Color.Transparent)
+                                    .clickable {
+                                        isPhoneRegisterMode = true
+                                        localError = ""
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                                    .testTag("phone_auth_tab_register"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Register",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isPhoneRegisterMode) PureWhite else textSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 if (!otpRequested) {
+                    // Registration-only fields: Full Name & Driver metadata
+                    if (isPhoneRegisterMode) {
+                        OutlinedTextField(
+                            value = phoneRegisterName,
+                            onValueChange = { phoneRegisterName = it },
+                            label = { Text("Full Name") },
+                            placeholder = { Text(if (activeRole == "DRIVER") "e.g. Alieu Bah" else "e.g. Lamin Touray") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Person, contentDescription = null, tint = BrandBluePrimary)
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = borderCol,
+                                focusedContainerColor = inputBg,
+                                unfocusedContainerColor = inputBg,
+                                focusedTextColor = textPrimary,
+                                unfocusedTextColor = textPrimary
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("phone_register_name_input")
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    // Phone Number Input Row (Country Picker + Number)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -509,9 +836,10 @@ fun ModernSignInProvidersCard(
 
                         Box(
                             modifier = Modifier
-                                .height(52.dp)
+                                .height(56.dp)
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(inputBg)
+                                .border(1.dp, borderCol, RoundedCornerShape(14.dp))
                                 .clickable { showCountryPicker = true }
                                 .padding(horizontal = 12.dp)
                                 .testTag("country_code_selector_button"),
@@ -538,44 +866,36 @@ fun ModernSignInProvidersCard(
                         }
 
                         // Number Field Pill
-                        Box(
+                        OutlinedTextField(
+                            value = phoneInput,
+                            onValueChange = { phoneInput = it },
+                            placeholder = {
+                                Text(
+                                    text = "7599593",
+                                    fontSize = 15.sp,
+                                    color = textSecondary.copy(alpha = 0.6f)
+                                )
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = BrandBluePrimary,
+                                unfocusedBorderColor = borderCol,
+                                focusedContainerColor = inputBg,
+                                unfocusedContainerColor = inputBg,
+                                focusedTextColor = textPrimary,
+                                unfocusedTextColor = textPrimary
+                            ),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(52.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(inputBg)
-                                .padding(horizontal = 14.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            OutlinedTextField(
-                                value = phoneInput,
-                                onValueChange = { phoneInput = it },
-                                placeholder = {
-                                    Text(
-                                        text = "7599593580",
-                                        fontSize = 15.sp,
-                                        color = textSecondary.copy(alpha = 0.6f)
-                                    )
-                                },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color.Transparent,
-                                    unfocusedBorderColor = Color.Transparent,
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    focusedTextColor = textPrimary,
-                                    unfocusedTextColor = textPrimary
-                                ),
-                                textStyle = androidx.compose.ui.text.TextStyle(
-                                    fontSize = 15.5.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("phone_number_pill_input")
-                            )
-                        }
+                                .height(56.dp)
+                                .testTag("phone_number_pill_input")
+                        )
                     }
 
                     if (showCountryPicker) {
@@ -590,6 +910,30 @@ fun ModernSignInProvidersCard(
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Helpful security & instruction label
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = textSecondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = if (isPhoneRegisterMode)
+                                "Enter your phone to register. An SMS verification code will be sent."
+                            else
+                                "Enter your registered phone to receive a 6-digit SMS verification code.",
+                            fontSize = 11.5.sp,
+                            color = textSecondary
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // Action Button for Phone
@@ -601,9 +945,12 @@ fun ModernSignInProvidersCard(
                                 localError = "Please enter your mobile phone number."
                                 return@Button
                             }
+                            if (isPhoneRegisterMode && phoneRegisterName.trim().isBlank()) {
+                                localError = "Please enter your full name to register."
+                                return@Button
+                            }
                             val fullPhone = "$countryPrefix$cleanDigits"
-                            // Immediately request OTP dispatch
-                            onRequestOtp(fullPhone)
+                            onRequestOtpWithProfile(fullPhone, phoneRegisterName.trim())
                             countdownSeconds = 60
                             isTimerActive = true
                         },
@@ -611,7 +958,7 @@ fun ModernSignInProvidersCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
-                            .testTag("continue_phone_sms_btn"),
+                            .testTag(if (isPhoneRegisterMode) "phone_register_submit_btn" else "continue_phone_sms_btn"),
                         colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
                         shape = RoundedCornerShape(14.dp)
                     ) {
@@ -622,11 +969,21 @@ fun ModernSignInProvidersCard(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Sending Code...", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PureWhite)
+                            Text("Sending SMS Code...", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PureWhite)
                         } else {
-                            Icon(Icons.Default.Sms, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureWhite)
+                            Icon(
+                                if (isPhoneRegisterMode) Icons.Default.PersonAdd else Icons.Default.Sms,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = PureWhite
+                            )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Continue with SMS", fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = PureWhite)
+                            Text(
+                                if (isPhoneRegisterMode) "Register & Send Verification Code" else "Sign In with SMS Code",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite
+                            )
                         }
                     }
                 } else {
@@ -636,6 +993,7 @@ fun ModernSignInProvidersCard(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(18.dp))
                             .background(inputBg)
+                            .border(1.dp, borderCol, RoundedCornerShape(18.dp))
                             .padding(16.dp)
                     ) {
                         Row(
@@ -645,8 +1003,8 @@ fun ModernSignInProvidersCard(
                         ) {
                             Column {
                                 Text(
-                                    text = "Verification Code",
-                                    fontSize = 14.sp,
+                                    text = if (isPhoneRegisterMode) "Complete Registration" else "Verify SMS Code",
+                                    fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = textPrimary
                                 )
@@ -654,7 +1012,10 @@ fun ModernSignInProvidersCard(
                                     com.example.data.SmsOtpGatewayManager.formatE164PhoneNumber("$countryPrefix$phoneInput")
                                 }
                                 Text(
-                                    text = "Sent via SMS to $formattedPhoneDisplay",
+                                    text = if (isPhoneRegisterMode && phoneRegisterName.isNotBlank())
+                                        "Registering $phoneRegisterName • $formattedPhoneDisplay"
+                                    else
+                                        "Sent via Firebase SMS to $formattedPhoneDisplay",
                                     fontSize = 11.5.sp,
                                     color = textSecondary
                                 )
@@ -667,7 +1028,7 @@ fun ModernSignInProvidersCard(
                                     onRequestOtp("") // Trigger resetting otpRequested
                                 }
                             ) {
-                                Text("Edit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
+                                Text("Edit Phone", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
                             }
                         }
 
@@ -715,7 +1076,7 @@ fun ModernSignInProvidersCard(
                                         localError = ""
                                         val cleanDigits = phoneInput.trim().replace(" ", "")
                                         val fullPhone = if (cleanDigits.isNotBlank()) "$countryPrefix$cleanDigits" else "$countryPrefix 7712345"
-                                        onRequestOtp(fullPhone)
+                                        onRequestOtpWithProfile(fullPhone, phoneRegisterName.trim())
                                         countdownSeconds = 60
                                         isTimerActive = true
                                     },
@@ -783,7 +1144,12 @@ fun ModernSignInProvidersCard(
                         ) {
                             Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureWhite)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Verify & Complete Sign In", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = PureWhite)
+                            Text(
+                                text = if (isPhoneRegisterMode) "Verify & Register Account" else "Verify & Complete Sign In",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite
+                            )
                         }
                     }
                 }
@@ -807,6 +1173,14 @@ fun ModernSignInProvidersCard(
                 )
             }
         }
+    }
+
+    if (showForgotPasswordDialog) {
+        ForgotPasswordDialog(
+            initialEmail = emailInput,
+            isDark = isDark,
+            onDismiss = { showForgotPasswordDialog = false }
+        )
     }
 }
 
@@ -1074,4 +1448,48 @@ fun CountryCodePickerDialog(
         }
     }
 }
+
+@Composable
+private fun RequirementPill(
+    label: String,
+    isMet: Boolean,
+    isDark: Boolean
+) {
+    val pillBg = if (isMet) {
+        Color(0xFF10B981).copy(alpha = 0.15f)
+    } else {
+        if (isDark) Color(0xFF334155).copy(alpha = 0.4f) else Color(0xFFE2E8F0)
+    }
+    val pillTextColor = if (isMet) {
+        Color(0xFF10B981)
+    } else {
+        if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = pillBg,
+        modifier = Modifier.height(24.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Icon(
+                imageVector = if (isMet) Icons.Default.Check else Icons.Default.Close,
+                contentDescription = null,
+                tint = pillTextColor,
+                modifier = Modifier.size(11.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                fontWeight = if (isMet) FontWeight.Bold else FontWeight.Medium,
+                color = pillTextColor
+            )
+        }
+    }
+}
+
 
