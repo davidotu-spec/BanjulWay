@@ -139,21 +139,21 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
                 viewModel.cancelAccountVerification()
             }
         )
-    }
-
-    pendingProfileCompletion?.let { pending ->
-        ProfileCompletionDialog(
-            userId = pending.uid,
-            userEmail = pending.email,
-            initialDisplayName = pending.initialName,
-            initialPhoneNumber = pending.initialPhone,
-            userRole = pending.role,
-            isDark = false,
-            onProfileCompleted = { name, phone ->
-                viewModel.completeUserProfile(name, phone)
-            },
-            onDismiss = { viewModel.dismissProfileCompletionPrompt() }
-        )
+    } else {
+        pendingProfileCompletion?.let { pending ->
+            ProfileCompletionDialog(
+                userId = pending.uid,
+                userEmail = pending.email,
+                initialDisplayName = pending.initialName,
+                initialPhoneNumber = pending.initialPhone,
+                userRole = pending.role,
+                isDark = false,
+                onProfileCompleted = { name, phone ->
+                    viewModel.completeUserProfile(name, phone)
+                },
+                onDismiss = { viewModel.dismissProfileCompletionPrompt() }
+            )
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

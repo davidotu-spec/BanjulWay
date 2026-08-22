@@ -3,12 +3,14 @@ package com.example.ui
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Warning
@@ -20,6 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -57,6 +61,15 @@ fun ProfileCompletionDialog(
     var errorMessage by remember { mutableStateOf("") }
 
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+
+    val safeDismiss = {
+        keyboardController?.hide()
+        focusManager.clearFocus()
+        onDismiss()
+    }
+
     val cardBg = if (isDark) Color(0xFF1E293B) else PureWhite
     val textPrimary = if (isDark) PureWhite else BrandBlueDark
     val textSecondary = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
@@ -65,7 +78,7 @@ fun ProfileCompletionDialog(
 
     Dialog(
         onDismissRequest = {
-            if (!isSaving) onDismiss()
+            if (!isSaving) safeDismiss()
         },
         properties = DialogProperties(
             dismissOnBackPress = !isSaving,
@@ -82,255 +95,287 @@ fun ProfileCompletionDialog(
                 .wrapContentHeight()
                 .testTag("profile_completion_dialog")
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Header Badge
-                Box(
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Top-Right Close Button
+                IconButton(
+                    onClick = { if (!isSaving) safeDismiss() },
                     modifier = Modifier
-                        .size(60.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(BrandBluePrimary, BrandBlueSecondary)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
+                        .align(Alignment.TopEnd)
+                        .padding(12.dp)
+                        .size(36.dp)
+                        .testTag("close_profile_completion_dialog_btn")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = PureWhite,
-                        modifier = Modifier.size(32.dp)
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = textSecondary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Text(
-                    text = "Complete Your Profile",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimary,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = "Welcome to WayGo! Please provide your name and phone number to finish setting up your account.",
-                    fontSize = 13.sp,
-                    color = textSecondary,
-                    textAlign = TextAlign.Center,
-                    lineHeight = 18.sp
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Display Name Input
-                OutlinedTextField(
-                    value = displayName,
-                    onValueChange = {
-                        displayName = it
-                        if (errorMessage.isNotBlank()) errorMessage = ""
-                    },
-                    label = { Text("Display Name / Full Name", color = textSecondary) },
-                    placeholder = { Text("e.g. Lamin Touray", color = textSecondary.copy(alpha = 0.5f)) },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = null,
-                            tint = BrandBluePrimary
-                        )
-                    },
-                    singleLine = true,
-                    enabled = !isSaving,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = textPrimary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("profile_display_name_input"),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandBluePrimary,
-                        unfocusedBorderColor = borderCol,
-                        focusedContainerColor = inputBg,
-                        unfocusedContainerColor = inputBg,
-                        focusedTextColor = textPrimary,
-                        unfocusedTextColor = textPrimary,
-                        cursorColor = BrandBluePrimary
-                    )
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Phone Number Input
-                OutlinedTextField(
-                    value = phoneNumber,
-                    onValueChange = {
-                        phoneNumber = it
-                        if (errorMessage.isNotBlank()) errorMessage = ""
-                    },
-                    label = { Text("Phone Number", color = textSecondary) },
-                    placeholder = { Text("+220 7712345", color = textSecondary.copy(alpha = 0.5f)) },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Phone,
-                            contentDescription = null,
-                            tint = BrandBluePrimary
-                        )
-                    },
-                    singleLine = true,
-                    enabled = !isSaving,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        color = textPrimary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("profile_phone_number_input"),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = BrandBluePrimary,
-                        unfocusedBorderColor = borderCol,
-                        focusedContainerColor = inputBg,
-                        unfocusedContainerColor = inputBg,
-                        focusedTextColor = textPrimary,
-                        unfocusedTextColor = textPrimary,
-                        cursorColor = BrandBluePrimary
-                    )
-                )
-
-                // Error Banner
-                AnimatedVisibility(visible = errorMessage.isNotBlank()) {
-                    Column {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFEF4444).copy(alpha = 0.12f),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = "Error",
-                                    tint = Color(0xFFEF4444),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = errorMessage,
-                                    color = Color(0xFFEF4444),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // Save Profile Button with CircularProgressIndicator
-                Button(
-                    onClick = {
-                        val cleanName = displayName.trim()
-                        val cleanPhone = phoneNumber.trim()
-
-                        if (cleanName.isBlank()) {
-                            errorMessage = "Please enter your display name."
-                            return@Button
-                        }
-                        if (cleanPhone.isBlank() || cleanPhone.length < 5) {
-                            errorMessage = "Please enter a valid phone number."
-                            return@Button
-                        }
-
-                        isSaving = true
-                        errorMessage = ""
-
-                        // Store in Firestore 'users' collection
-                        FirestoreManager.saveUserProfileToFirestore(
-                            userId = userId,
-                            displayName = cleanName,
-                            phoneNumber = cleanPhone,
-                            email = userEmail,
-                            role = userRole
-                        ) { success ->
-                            isSaving = false
-                            if (success) {
-                                Toast.makeText(context, "Profile saved successfully!", Toast.LENGTH_SHORT).show()
-                                onProfileCompleted(cleanName, cleanPhone)
-                            } else {
-                                Toast.makeText(context, "Saved locally (Firestore offline/synced).", Toast.LENGTH_SHORT).show()
-                                onProfileCompleted(cleanName, cleanPhone)
-                            }
-                        }
-                    },
-                    enabled = !isSaving,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("save_profile_button"),
-                    colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
-                    shape = RoundedCornerShape(12.dp)
+                        .padding(horizontal = 24.dp, vertical = 26.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (isSaving) {
-                        CircularProgressIndicator(
-                            color = PureWhite,
-                            strokeWidth = 2.5.dp,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Saving Profile...",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PureWhite
-                        )
-                    } else {
+                    // Header Badge
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(BrandBluePrimary, BrandBlueSecondary)
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Check,
+                            imageVector = Icons.Default.Person,
                             contentDescription = null,
                             tint = PureWhite,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Save & Continue",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PureWhite
+                            modifier = Modifier.size(32.dp)
                         )
                     }
-                }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                // Skip / Continue Later
-                TextButton(
-                    onClick = onDismiss,
-                    enabled = !isSaving,
-                    modifier = Modifier.testTag("skip_profile_completion_btn")
-                ) {
                     Text(
-                        text = "Skip for Now",
+                        text = "Complete Your Profile",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Welcome to WayGo! Please provide your name and phone number to finish setting up your account.",
                         fontSize = 13.sp,
                         color = textSecondary,
-                        fontWeight = FontWeight.Medium
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp
                     )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Display Name Input
+                    OutlinedTextField(
+                        value = displayName,
+                        onValueChange = {
+                            displayName = it
+                            if (errorMessage.isNotBlank()) errorMessage = ""
+                        },
+                        label = { Text("Display Name / Full Name", color = textSecondary) },
+                        placeholder = { Text("e.g. Lamin Touray", color = textSecondary.copy(alpha = 0.5f)) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Person,
+                                contentDescription = null,
+                                tint = BrandBluePrimary
+                            )
+                        },
+                        singleLine = true,
+                        enabled = !isSaving,
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_display_name_input"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = borderCol,
+                            focusedContainerColor = inputBg,
+                            unfocusedContainerColor = inputBg,
+                            focusedTextColor = textPrimary,
+                            unfocusedTextColor = textPrimary,
+                            cursorColor = BrandBluePrimary
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Phone Number Input
+                    OutlinedTextField(
+                        value = phoneNumber,
+                        onValueChange = {
+                            phoneNumber = it
+                            if (errorMessage.isNotBlank()) errorMessage = ""
+                        },
+                        label = { Text("Phone Number", color = textSecondary) },
+                        placeholder = { Text("+220 7712345", color = textSecondary.copy(alpha = 0.5f)) },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Phone,
+                                contentDescription = null,
+                                tint = BrandBluePrimary
+                            )
+                        },
+                        singleLine = true,
+                        enabled = !isSaving,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            color = textPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("profile_phone_number_input"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = BrandBluePrimary,
+                            unfocusedBorderColor = borderCol,
+                            focusedContainerColor = inputBg,
+                            unfocusedContainerColor = inputBg,
+                            focusedTextColor = textPrimary,
+                            unfocusedTextColor = textPrimary,
+                            cursorColor = BrandBluePrimary
+                        )
+                    )
+
+                    // Error Banner
+                    AnimatedVisibility(visible = errorMessage.isNotBlank()) {
+                        Column {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFEF4444).copy(alpha = 0.12f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = "Error",
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = errorMessage,
+                                        color = Color(0xFFEF4444),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Save Profile Button with CircularProgressIndicator
+                    Button(
+                        onClick = {
+                            val cleanName = displayName.trim()
+                            val cleanPhone = phoneNumber.trim()
+
+                            if (cleanName.isBlank()) {
+                                errorMessage = "Please enter your display name."
+                                return@Button
+                            }
+                            if (cleanPhone.isBlank() || cleanPhone.length < 5) {
+                                errorMessage = "Please enter a valid phone number."
+                                return@Button
+                            }
+
+                            keyboardController?.hide()
+                            focusManager.clearFocus()
+                            isSaving = true
+                            errorMessage = ""
+
+                            // Store in Firestore 'users' collection
+                            FirestoreManager.saveUserProfileToFirestore(
+                                userId = userId,
+                                displayName = cleanName,
+                                phoneNumber = cleanPhone,
+                                email = userEmail,
+                                role = userRole
+                            ) { success ->
+                                isSaving = false
+                                if (success) {
+                                    Toast.makeText(context, "Profile saved successfully!", Toast.LENGTH_SHORT).show()
+                                    onProfileCompleted(cleanName, cleanPhone)
+                                } else {
+                                    Toast.makeText(context, "Saved locally (Firestore offline/synced).", Toast.LENGTH_SHORT).show()
+                                    onProfileCompleted(cleanName, cleanPhone)
+                                }
+                            }
+                        },
+                        enabled = !isSaving,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("save_profile_button"),
+                        colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                color = PureWhite,
+                                strokeWidth = 2.5.dp,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Saving Profile...",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = PureWhite,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Save & Continue",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Skip / Continue Later with generous touch target and instant responsive dismiss
+                    OutlinedButton(
+                        onClick = {
+                            if (!isSaving) safeDismiss()
+                        },
+                        enabled = !isSaving,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("skip_profile_completion_btn"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = textSecondary
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, borderCol)
+                    ) {
+                        Text(
+                            text = "Skip for Now",
+                            fontSize = 13.5.sp,
+                            color = textSecondary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }

@@ -33,7 +33,7 @@ import com.example.ui.theme.*
 fun AccountVerificationDialog(
     userEmail: String,
     userRole: String,
-    generatedCode: String,
+    generatedCode: String = "",
     verificationMessage: String,
     isDark: Boolean = false,
     onVerifyCode: (String) -> Boolean,
@@ -202,48 +202,6 @@ fun AccountVerificationDialog(
                         unfocusedTextColor = textPrimary
                     )
                 )
-
-                // Quick Auto-Fill Chip for fast verification
-                if (generatedCode.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        modifier = Modifier
-                            .clickable {
-                                inputCode = generatedCode
-                                errorMessage = ""
-                                isVerifying = true
-                                val success = onVerifyCode(generatedCode)
-                                if (!success) {
-                                    errorMessage = "Incorrect code. Please try resending."
-                                    isVerifying = false
-                                } else {
-                                    Toast.makeText(context, "Account verified!", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            .testTag("quick_fill_code_chip"),
-                        shape = RoundedCornerShape(20.dp),
-                        color = BrandBluePrimary.copy(alpha = 0.1f)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Key,
-                                contentDescription = null,
-                                tint = BrandBluePrimary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = "Code: $generatedCode  (Tap to fill & verify)",
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BrandBluePrimary
-                            )
-                        }
-                    }
-                }
 
                 AnimatedVisibility(visible = errorMessage.isNotBlank()) {
                     Text(

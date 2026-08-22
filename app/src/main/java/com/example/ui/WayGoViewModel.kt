@@ -272,6 +272,8 @@ class WayGoViewModel(
         val email = pending?.email ?: FirebaseAuthManager.getCurrentUser()?.email ?: ""
         val role = pending?.role ?: _currentRole.value
 
+        _pendingProfileCompletion.value = null
+
         viewModelScope.launch {
             // Save to Firestore 'users' collection
             FirestoreManager.saveUserProfileToFirestore(
@@ -339,7 +341,7 @@ class WayGoViewModel(
         _verificationMessage.value = "Security code dispatched to $cleanEmail"
         _isVerificationPending.value = true
 
-        // Dispatch real email via EmailVerificationService and Firebase
+        // Dispatch real email via EmailVerificationService
         viewModelScope.launch(Dispatchers.IO) {
             val status = com.example.data.EmailVerificationService.sendVerificationEmail(
                 recipientEmail = cleanEmail,
@@ -351,8 +353,8 @@ class WayGoViewModel(
         }
 
         triggerPushNotification(
-            "📩 Security Code: $code",
-            "Your 6-digit WayGo verification code is $code (sent to $cleanEmail)."
+            "📩 Security Code Dispatched",
+            "A 6-digit verification code was sent to $cleanEmail. Please check your email inbox to verify."
         )
 
         onComplete()
@@ -360,10 +362,7 @@ class WayGoViewModel(
 
     fun confirmAccountVerification(inputCode: String): Boolean {
         val cleanInput = inputCode.trim()
-        val isCodeValid = cleanInput == _verificationCode.value || 
-                cleanInput == "123456" || 
-                cleanInput == "000000" ||
-                (cleanInput.length == 6 && cleanInput.all { it.isDigit() })
+        val isCodeValid = cleanInput == _verificationCode.value
 
         if (isCodeValid) {
             val role = _pendingVerificationRole.value
@@ -395,7 +394,7 @@ class WayGoViewModel(
         val newCode = (100000..999999).random().toString()
         _verificationCode.value = newCode
         val targetEmail = _pendingVerificationEmail.value
-        _verificationMessage.value = "A new confirmation email has been dispatched to $targetEmail"
+        _verificationMessage.value = "A new verification code has been dispatched to $targetEmail"
 
         viewModelScope.launch(Dispatchers.IO) {
             com.example.data.EmailVerificationService.sendVerificationEmail(
@@ -407,8 +406,8 @@ class WayGoViewModel(
         }
 
         triggerPushNotification(
-            "📩 Security Code: $newCode",
-            "A new 6-digit security code ($newCode) was dispatched to $targetEmail."
+            "📩 Verification Code Resent",
+            "A new 6-digit security code was dispatched to $targetEmail. Please check your email inbox."
         )
     }
 
@@ -1368,8 +1367,6 @@ class WayGoViewModel(
                     email = cleanEmail,
                     pass = cleanPass,
                     onSuccess = {
-                        _isUserLoggedIn.value = true
-                        _currentRole.value = "PASSENGER"
                         _isPassengerAuthenticating.value = false
                         _authError.value = ""
                         val formattedName = if (cleanName.isNotBlank()) cleanName else cleanEmail.substringBefore("@")
@@ -1388,7 +1385,7 @@ class WayGoViewModel(
                                     avatarIndex = currentProf?.avatarIndex ?: 0
                                 )
                             )
-                            onSuccess()
+                            triggerAccountVerification(cleanEmail, "PASSENGER", onComplete = onSuccess)
                         }
                     },
                     onError = { err ->
@@ -1462,13 +1459,11 @@ class WayGoViewModel(
                     email = cleanEmail,
                     pass = cleanPass,
                     onSuccess = {
-                        _isDriverLoggedIn.value = true
-                        _currentRole.value = "DRIVER"
                         _driverEmail.value = cleanEmail
                         _isDriverAuthenticating.value = false
                         _driverAuthError.value = ""
                         _driverPassword.value = ""
-                        onSuccess()
+                        triggerAccountVerification(cleanEmail, "DRIVER", onComplete = onSuccess)
                     },
                     onError = { err ->
                         _isDriverAuthenticating.value = false

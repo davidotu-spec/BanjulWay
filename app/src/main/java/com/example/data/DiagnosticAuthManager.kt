@@ -274,12 +274,6 @@ object DiagnosticAuthManager {
                             message = "Account created in Firebase Console! Email: ${user.email}, UID: ${user.uid}",
                             details = "New account provisioned directly in Firebase Authentication backend."
                         )
-                        try {
-                            user.sendEmailVerification()
-                            log(LogLevel.INFO, "VerificationEmail", "Dispatched verification email to ${user.email}")
-                        } catch (e: Exception) {
-                            log(LogLevel.WARN, "VerificationEmail", "Verification email dispatch note: ${e.message}")
-                        }
                         onSuccess(user)
                     } else {
                         val diagnostic = log(
