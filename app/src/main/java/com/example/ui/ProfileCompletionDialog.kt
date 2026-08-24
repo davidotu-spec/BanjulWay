@@ -5,9 +5,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -32,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.zIndex
 import com.example.data.FirestoreManager
 import com.example.ui.theme.BrandBlueDark
 import com.example.ui.theme.BrandBluePrimary
@@ -40,7 +43,7 @@ import com.example.ui.theme.PureWhite
 
 /**
  * Dialog prompting newly registered users to complete their profile with a Display Name and Phone Number.
- * This stores the profile information into the 'users' collection in Firestore.
+ * This stores the profile information into the 'users' collection in Firestore and local database.
  */
 @Composable
 fun ProfileCompletionDialog(
@@ -57,16 +60,18 @@ fun ProfileCompletionDialog(
     var phoneNumber by remember {
         mutableStateOf(if (initialPhoneNumber.isNotBlank()) initialPhoneNumber else "+220 ")
     }
-    var isSaving by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
 
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val scrollState = rememberScrollState()
 
-    val safeDismiss = {
-        keyboardController?.hide()
-        focusManager.clearFocus()
+    val performDismiss: () -> Unit = {
+        try {
+            keyboardController?.hide()
+            focusManager.clearFocus()
+        } catch (_: Exception) {}
         onDismiss()
     }
 
@@ -77,12 +82,10 @@ fun ProfileCompletionDialog(
     val borderCol = if (isDark) Color(0xFF334155) else Color(0xFFE2E8F0)
 
     Dialog(
-        onDismissRequest = {
-            if (!isSaving) safeDismiss()
-        },
+        onDismissRequest = performDismiss,
         properties = DialogProperties(
-            dismissOnBackPress = !isSaving,
-            dismissOnClickOutside = !isSaving,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
             usePlatformDefaultWidth = false
         )
     ) {
@@ -93,36 +96,48 @@ fun ProfileCompletionDialog(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .wrapContentHeight()
+                .padding(vertical = 16.dp)
                 .testTag("profile_completion_dialog")
         ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                // Top-Right Close Button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+            ) {
+                // Top-Right Close Button - Highest Z-Index for guaranteed single-tap response
                 IconButton(
-                    onClick = { if (!isSaving) safeDismiss() },
+                    onClick = {
+                        performDismiss()
+                    },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(12.dp)
-                        .size(36.dp)
+                        .padding(8.dp)
+                        .size(48.dp)
+                        .zIndex(20f)
                         .testTag("close_profile_completion_dialog_btn")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
+                        contentDescription = "Close Dialog",
                         tint = textSecondary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
 
+                // Scrollable Content
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 26.dp),
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 24.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Header Badge
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Header Avatar Badge
                     Box(
                         modifier = Modifier
-                            .size(60.dp)
+                            .size(64.dp)
                             .clip(CircleShape)
                             .background(
                                 Brush.linearGradient(
@@ -133,9 +148,9 @@ fun ProfileCompletionDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Person,
-                            contentDescription = null,
+                            contentDescription = "Profile Icon",
                             tint = PureWhite,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(36.dp)
                         )
                     }
 
@@ -178,7 +193,6 @@ fun ProfileCompletionDialog(
                             )
                         },
                         singleLine = true,
-                        enabled = !isSaving,
                         textStyle = androidx.compose.ui.text.TextStyle(
                             color = textPrimary,
                             fontSize = 15.sp,
@@ -209,7 +223,7 @@ fun ProfileCompletionDialog(
                             if (errorMessage.isNotBlank()) errorMessage = ""
                         },
                         label = { Text("Phone Number", color = textSecondary) },
-                        placeholder = { Text("+220 7712345", color = textSecondary.copy(alpha = 0.5f)) },
+                        placeholder = { Text("+220 771 2345", color = textSecondary.copy(alpha = 0.5f)) },
                         leadingIcon = {
                             Icon(
                                 Icons.Default.Phone,
@@ -218,7 +232,6 @@ fun ProfileCompletionDialog(
                             )
                         },
                         singleLine = true,
-                        enabled = !isSaving,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         textStyle = androidx.compose.ui.text.TextStyle(
                             color = textPrimary,
@@ -274,7 +287,7 @@ fun ProfileCompletionDialog(
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    // Save Profile Button with CircularProgressIndicator
+                    // Save Profile Button - Immediate optimistic completion & background sync
                     Button(
                         onClick = {
                             val cleanName = displayName.trim()
@@ -289,89 +302,53 @@ fun ProfileCompletionDialog(
                                 return@Button
                             }
 
-                            keyboardController?.hide()
-                            focusManager.clearFocus()
-                            isSaving = true
-                            errorMessage = ""
+                            try {
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                            } catch (_: Exception) {}
 
-                            // Store in Firestore 'users' collection
-                            FirestoreManager.saveUserProfileToFirestore(
-                                userId = userId,
-                                displayName = cleanName,
-                                phoneNumber = cleanPhone,
-                                email = userEmail,
-                                role = userRole
-                            ) { success ->
-                                isSaving = false
-                                if (success) {
-                                    Toast.makeText(context, "Profile saved successfully!", Toast.LENGTH_SHORT).show()
-                                    onProfileCompleted(cleanName, cleanPhone)
-                                } else {
-                                    Toast.makeText(context, "Saved locally (Firestore offline/synced).", Toast.LENGTH_SHORT).show()
-                                    onProfileCompleted(cleanName, cleanPhone)
-                                }
-                            }
+                            // Immediately complete profile and dismiss dialog optimistically
+                            onProfileCompleted(cleanName, cleanPhone)
+                            Toast.makeText(context, "Profile updated successfully!", Toast.LENGTH_SHORT).show()
                         },
-                        enabled = !isSaving,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
+                            .height(50.dp)
                             .testTag("save_profile_button"),
                         colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        if (isSaving) {
-                            CircularProgressIndicator(
-                                color = PureWhite,
-                                strokeWidth = 2.5.dp,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Saving Profile...",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PureWhite
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = PureWhite,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Save & Continue",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = PureWhite
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = PureWhite,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Save & Continue",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PureWhite
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Skip / Continue Later with generous touch target and instant responsive dismiss
-                    OutlinedButton(
+                    // Skip / Continue Later button with guaranteed touch target and instant response
+                    TextButton(
                         onClick = {
-                            if (!isSaving) safeDismiss()
+                            performDismiss()
                         },
-                        enabled = !isSaving,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                             .testTag("skip_profile_completion_btn"),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color.Transparent,
-                            contentColor = textSecondary
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, borderCol)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
                             text = "Skip for Now",
-                            fontSize = 13.5.sp,
+                            fontSize = 14.sp,
                             color = textSecondary,
                             fontWeight = FontWeight.SemiBold
                         )

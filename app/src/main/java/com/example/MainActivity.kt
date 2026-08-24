@@ -189,9 +189,9 @@ fun WayGoMasterApp(viewModel: WayGoViewModel) {
             )
         }
 
-        // Heads-up Push Notification HUD sliding down elegantly!
+        // Heads-up Push Notification HUD sliding down only when in DRIVER fleet section
         androidx.compose.animation.AnimatedVisibility(
-            visible = activeNotif != null,
+            visible = activeNotif != null && activeRole == "DRIVER",
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { -it }) + androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { -it }) + androidx.compose.animation.fadeOut(),
             modifier = Modifier

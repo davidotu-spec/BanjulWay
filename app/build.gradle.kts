@@ -12,7 +12,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.waygo.kxmpzq"
+    applicationId = "com.aistudio.wayGo.kxmpzq"
     minSdk = 24
     targetSdk = 36
     versionCode = 3

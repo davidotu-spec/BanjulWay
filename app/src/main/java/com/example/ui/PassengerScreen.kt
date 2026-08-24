@@ -2167,15 +2167,6 @@ fun HomeScreenContent(
                                         .padding(12.dp)
                                         .testTag("matched_driver_profile_card")
                                 ) {
-                                    // Simulated Polling Mechanism for Trip Status Updates
-                                    var pollingPulse by remember { mutableStateOf(false) }
-                                    LaunchedEffect(activeTrip?.id, activeTrip?.status) {
-                                        while (true) {
-                                            delay(2000)
-                                            pollingPulse = !pollingPulse
-                                        }
-                                    }
-
                                     val tripStatus = activeTrip?.status ?: "ACCEPTED"
 
                                     var statusTitle by remember { mutableStateOf("Driver En Route") }
@@ -2265,7 +2256,7 @@ fun HomeScreenContent(
                                                         modifier = Modifier
                                                             .size(7.dp)
                                                             .clip(CircleShape)
-                                                            .background(if (pollingPulse) SuccessGreen else SuccessGreen.copy(alpha = 0.3f))
+                                                            .background(SuccessGreen)
                                                     )
                                                     Spacer(modifier = Modifier.width(4.dp))
                                                     Text(
