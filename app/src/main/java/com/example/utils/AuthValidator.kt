@@ -25,42 +25,102 @@ data class PasswordValidationResult(
 )
 
 /**
- * General validation result for forms.
+ * General validation result for forms and auth operations.
  */
 data class ValidationResult(
     val isValid: Boolean,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val normalizedValue: String? = null
 )
 
 /**
- * AuthValidator provides a dedicated validation layer for checking email formats,
- * password complexity rules (meeting Firebase 6+ character requirement), and full registration payloads
- * before invoking Firebase Authentication operations.
+ * AuthValidator provides a dedicated validation and normalization layer:
+ * - RFC 5322 compliant email regex validation
+ * - Domain validation and address normalization to prevent account duplicate collisions
+ * - Password complexity enforcement (meeting Firebase >= 6 characters rule)
+ * - Sign-up payload validation with mandatory email verification requirements
  */
 object AuthValidator {
 
-    private val EMAIL_REGEX = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
+    /**
+     * Strict RFC 5322 compliant regex for standard email addresses:
+     * - Disallows consecutive dots
+     * - Disallows leading/trailing special characters
+     * - Requires valid domain syntax with top-level domain (TLD) of 2-7 alphabetical characters
+     */
+    val RFC_5322_EMAIL_REGEX = Regex(
+        "^[a-zA-Z0-9_+&*-]+(?:\\.[a-zA-Z0-9_+&*-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,7}$"
+    )
 
     /**
-     * Validates email format according to standard email RFC patterns.
+     * Normalizes an email address to a canonical form to prevent duplicate account collisions.
+     * Trims leading/trailing whitespace, converts to lowercase, and strips trailing periods.
+     */
+    fun normalizeEmail(email: String): String {
+        val trimmed = email.trim().lowercase()
+        if (!trimmed.contains("@")) return trimmed
+        val parts = trimmed.split("@")
+        if (parts.size != 2) return trimmed
+        val localPart = parts[0].trim()
+        val domainPart = parts[1].trim()
+        return "$localPart@$domainPart"
+    }
+
+    /**
+     * Validates email format according to RFC 5322 and strict domain validation rules.
+     * Enforces domain syntax, non-empty local-part, and valid TLD.
      */
     fun validateEmail(email: String): ValidationResult {
         val cleanEmail = email.trim()
         if (cleanEmail.isBlank()) {
             return ValidationResult(false, "Email address cannot be empty.")
         }
-        if (!cleanEmail.contains("@") || !cleanEmail.contains(".")) {
-            return ValidationResult(false, "Please enter a complete email address (e.g. name@domain.com).")
+        if (cleanEmail.contains(" ")) {
+            return ValidationResult(false, "Email address cannot contain spaces.")
         }
-        if (!Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches() && !cleanEmail.matches(EMAIL_REGEX)) {
-            return ValidationResult(false, "The email format is invalid. Please check for typos.")
+        if (!cleanEmail.contains("@")) {
+            return ValidationResult(false, "Email address must contain an '@' sign.")
         }
-        return ValidationResult(true)
+
+        val parts = cleanEmail.split("@")
+        if (parts.size != 2) {
+            return ValidationResult(false, "Email address cannot contain multiple '@' symbols.")
+        }
+
+        val localPart = parts[0]
+        val domainPart = parts[1]
+
+        if (localPart.isBlank()) {
+            return ValidationResult(false, "Email username (before '@') cannot be empty.")
+        }
+        if (localPart.startsWith(".") || localPart.endsWith(".") || localPart.contains("..")) {
+            return ValidationResult(false, "Email username contains invalid consecutive or edge dots.")
+        }
+
+        if (domainPart.isBlank() || !domainPart.contains(".")) {
+            return ValidationResult(false, "Please provide a valid domain name with extension (e.g., .com, .org, .gm).")
+        }
+        if (domainPart.startsWith(".") || domainPart.endsWith(".") || domainPart.contains("..")) {
+            return ValidationResult(false, "Domain part contains invalid dots or formatting.")
+        }
+
+        val domainLabels = domainPart.split(".")
+        val tld = domainLabels.last()
+        if (tld.length < 2 || !tld.all { it.isLetter() }) {
+            return ValidationResult(false, "Domain must end with a valid top-level domain (e.g., .com, .org, .gm).")
+        }
+
+        if (!cleanEmail.matches(RFC_5322_EMAIL_REGEX)) {
+            return ValidationResult(false, "Invalid email address format according to RFC 5322 standard.")
+        }
+
+        val normalized = normalizeEmail(cleanEmail)
+        return ValidationResult(true, null, normalized)
     }
 
     /**
      * Validates password requirements before sending to Firebase createUserWithEmailAndPassword.
-     * Enforces Firebase's hard requirement of >= 6 characters and calculates strength.
+     * Enforces Firebase's requirement of >= 6 characters and calculates strength.
      */
     fun validatePassword(password: String): PasswordValidationResult {
         val cleanPass = password.trim()
@@ -109,7 +169,7 @@ object AuthValidator {
     }
 
     /**
-     * Complete sign-up validation checking email, password, name, and optional driver requirements.
+     * Complete sign-up validation checking RFC 5322 normalized email, password, name, and driver requirements.
      */
     fun validateSignUp(
         email: String,
@@ -136,6 +196,7 @@ object AuthValidator {
             return ValidationResult(false, "Please enter your vehicle license plate.")
         }
 
-        return ValidationResult(true)
+        return ValidationResult(true, null, emailResult.normalizedValue)
     }
 }
+

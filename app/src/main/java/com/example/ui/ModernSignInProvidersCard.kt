@@ -110,6 +110,13 @@ fun ModernSignInProvidersCard(
     var localError by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
 
+    LaunchedEffect(authError) {
+        if (authError.isNotBlank()) {
+            isSubmitting = false
+            localError = authError
+        }
+    }
+
     val cardBg = if (isDark) Color(0xFF1E293B) else PureWhite
     val textPrimary = if (isDark) PureWhite else BrandBlueDark
     val textSecondary = if (isDark) Color(0xFF94A3B8) else NeutralGray

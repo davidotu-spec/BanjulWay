@@ -23,6 +23,7 @@ class WayGoApplication : Application() {
 
     private fun initializeFirebase() {
         try {
+            com.example.data.FirebaseAuthManager.init(this)
             com.example.data.DiagnosticAuthManager.initialize(this)
             com.example.data.AuthLogger.startObserving(this)
         } catch (e: Exception) {

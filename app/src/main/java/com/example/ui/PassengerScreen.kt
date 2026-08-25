@@ -80,6 +80,17 @@ fun resolveLocationForInput(input: String): GLocation {
     if (trimmed.isEmpty()) {
         return GAMBIA_LOCATIONS[0]
     }
+    // Check against verified Banjul and Kanifing designated pickup points first
+    val pickupMatch = com.example.data.LocationTrackingService.BANJUL_KANIFING_PICKUP_POINTS.firstOrNull { point ->
+        point.name.equals(trimmed, ignoreCase = true) ||
+        point.name.contains(trimmed, ignoreCase = true) ||
+        trimmed.contains(point.name.split(",")[0], ignoreCase = true) ||
+        trimmed.contains(point.zone, ignoreCase = true)
+    }
+    if (pickupMatch != null) {
+        return GLocation(pickupMatch.name, pickupMatch.latitude, pickupMatch.longitude)
+    }
+
     val match = GAMBIA_LOCATIONS.firstOrNull { loc ->
         loc.name.equals(trimmed, ignoreCase = true) ||
         loc.name.contains(trimmed, ignoreCase = true) ||
@@ -729,6 +740,22 @@ fun HomeScreenContent(
     var selectedScheduleMinute by remember { mutableStateOf("00") }
     var selectedScheduleAmPm by remember { mutableStateOf("AM") }
 
+    // Live GPS Location Tracking & Banjul/Kanifing Pickup Identification State
+    val context = LocalContext.current
+    val locationHelper = com.example.utils.rememberLocationState()
+    val liveTrackingState by com.example.data.LocationTrackingService.trackingState.collectAsState()
+    var selectedRegionFilter by remember { mutableStateOf("ALL") } // "ALL", "BANJUL", "KANIFING", "COASTAL"
+
+    // Start high-accuracy location tracking service when permission is available
+    DisposableEffect(locationHelper.state.value.isPermissionGranted) {
+        if (locationHelper.state.value.isPermissionGranted) {
+            com.example.data.LocationTrackingService.startTracking(context)
+        }
+        onDispose {
+            com.example.data.LocationTrackingService.stopTracking()
+        }
+    }
+
     // LatLng anchors
     var pCoordinates by remember { mutableStateOf<GLocation?>(null) }
     var dCoordinates by remember { mutableStateOf<GLocation?>(null) }
@@ -1275,6 +1302,140 @@ fun HomeScreenContent(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        // Banjul & Kanifing High-Accuracy Pick-up Point Assistant
+                        val nearestHub = liveTrackingState.closestPickupPoint
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("pickup_point_assistant_card"),
+                            shape = RoundedCornerShape(12.dp),
+                            color = BrandBluePrimary.copy(alpha = 0.05f),
+                            border = BorderStroke(1.dp, BrandBluePrimary.copy(alpha = 0.18f))
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .background(if (liveTrackingState.isTrackingActive) SuccessGreen else NeutralGray, CircleShape)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (liveTrackingState.isTrackingActive) "GPS Tracked: ${liveTrackingState.detectedRegion}" else "Banjul & Kanifing Smart Hubs",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = BrandBlueDark
+                                        )
+                                    }
+
+                                    if (!locationHelper.state.value.isPermissionGranted) {
+                                        TextButton(
+                                            onClick = { locationHelper.requestPermissionAndLocation() },
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("Enable GPS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BrandBluePrimary)
+                                        }
+                                    } else {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = SuccessGreen.copy(alpha = 0.15f)
+                                        ) {
+                                            Text(
+                                                text = "High Accuracy",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = SuccessGreen,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (nearestHub != null) {
+                                    val distStr = com.example.data.LocationTrackingService.formatDistance(liveTrackingState.distanceToClosestPickupMeters)
+                                    val walkMin = com.example.data.LocationTrackingService.estimateWalkingMinutes(liveTrackingState.distanceToClosestPickupMeters)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.GpsFixed,
+                                                    contentDescription = null,
+                                                    tint = SuccessGreen,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Nearest Hub: ${nearestHub.name}",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BrandBlueDark
+                                                )
+                                            }
+                                            Text(
+                                                text = "$distStr away • ~$walkMin min walk • ${nearestHub.pickupGuidance}",
+                                                fontSize = 10.sp,
+                                                color = NeutralGray,
+                                                lineHeight = 13.sp,
+                                                modifier = Modifier.padding(top = 2.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Button(
+                                            onClick = {
+                                                pickupName = nearestHub.name
+                                                pCoordinates = GLocation(nearestHub.name, nearestHub.latitude, nearestHub.longitude)
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier.testTag("apply_nearest_pickup_btn")
+                                        ) {
+                                            Text("Set As Pickup", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
+                                    }
+                                }
+
+                                // Quick Region Filter Buttons
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    listOf("ALL" to "All Points", "BANJUL" to "Banjul City", "KANIFING" to "Kanifing / KM").forEach { (code, label) ->
+                                        val isSel = selectedRegionFilter == code
+                                        Surface(
+                                            onClick = { selectedRegionFilter = code },
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (isSel) BrandBluePrimary else PureWhite,
+                                            border = BorderStroke(1.dp, if (isSel) BrandBluePrimary else NeutralGray.copy(alpha = 0.2f)),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                fontSize = 10.sp,
+                                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSel) Color.White else BrandBlueDark,
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                                modifier = Modifier.padding(vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         // Pickup Input
                         OutlinedTextField(
                             value = pickupName,
@@ -1357,7 +1518,15 @@ fun HomeScreenContent(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Quick Location Suggestion Chips
+                        // Quick Location Suggestion Chips (Filtered by Selected Region)
+                        val suggestedPickups = remember(selectedRegionFilter) {
+                            when (selectedRegionFilter) {
+                                "BANJUL" -> com.example.data.LocationTrackingService.BANJUL_KANIFING_PICKUP_POINTS.filter { it.zone == "Banjul City" }
+                                "KANIFING" -> com.example.data.LocationTrackingService.BANJUL_KANIFING_PICKUP_POINTS.filter { it.zone != "Banjul City" }
+                                else -> com.example.data.LocationTrackingService.BANJUL_KANIFING_PICKUP_POINTS
+                            }
+                        }
+
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1365,13 +1534,13 @@ fun HomeScreenContent(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Quick Suggestion Chips:",
+                                    text = "Verified Pick-up Hubs (${suggestedPickups.size}):",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = BrandBlueDark.copy(alpha = 0.7f)
                                 )
                                 Text(
-                                    text = "Tap to auto-fill",
+                                    text = "Tap to select",
                                     fontSize = 10.sp,
                                     color = NeutralGray
                                 )
@@ -1381,24 +1550,31 @@ fun HomeScreenContent(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                items(GAMBIA_LOCATIONS) { loc ->
-                                    val shortName = loc.name.split(",")[0]
+                                items(suggestedPickups) { point ->
+                                    val shortName = point.name.split(",")[0]
                                     SuggestionChip(
                                         onClick = {
                                             if (pickupName.isBlank()) {
-                                                pickupName = loc.name
-                                                pCoordinates = loc
+                                                pickupName = point.name
+                                                pCoordinates = GLocation(point.name, point.latitude, point.longitude)
                                             } else {
-                                                dropoffName = loc.name
-                                                dCoordinates = loc
+                                                dropoffName = point.name
+                                                dCoordinates = GLocation(point.name, point.latitude, point.longitude)
                                             }
                                         },
                                         label = {
-                                            Text(
-                                                text = shortName,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Medium
-                                            )
+                                            Column {
+                                                Text(
+                                                    text = shortName,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                    text = point.category.label,
+                                                    fontSize = 8.sp,
+                                                    color = BrandBluePrimary
+                                                )
+                                            }
                                         },
                                         colors = SuggestionChipDefaults.suggestionChipColors(
                                             containerColor = PureWhite,

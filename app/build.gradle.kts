@@ -57,11 +57,6 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-  sourceSets {
-    getByName("main") {
-      java.srcDirs("build/generated/ksp/debug/kotlin")
-    }
-  }
 }
 
 // Configure the Secrets Gradle Plugin to use .env and .env.example files

@@ -10,15 +10,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
-import com.example.data.FareEstimateResult
-import com.example.data.TripFareEstimationService
+import com.example.data.*
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 
 /**
- * State class holding location data and permission status for the user/passenger.
+ * State class holding location data, permission status, and identified pick-up point metadata for the user/passenger.
  */
 data class UserLocationState(
     val latitude: Double = DEFAULT_GAMBIA_LAT,
@@ -27,20 +26,26 @@ data class UserLocationState(
     val isPermissionGranted: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    val isFallbackLocation: Boolean = true
+    val isFallbackLocation: Boolean = true,
+    val detectedZone: String = "Banjul City Center",
+    val closestPickupPointName: String = "Albert Market Main Gate, Banjul",
+    val pickupGuidance: String = "Wait by the designated passenger taxi shelter.",
+    val distanceToPickupMeters: Double = 0.0,
+    val recommendedPickups: List<PickupPointProximity> = emptyList()
 ) {
     val coordinatesString: String
-        get() = String.format("%.5f, %.5f", latitude, longitude)
+        get() = String.format(java.util.Locale.US, "%.5f° N, %.5f° W", latitude, -longitude)
 
     companion object {
         const val DEFAULT_GAMBIA_LAT = 13.4549
         const val DEFAULT_GAMBIA_LNG = -16.5790
-        const val DEFAULT_LOCATION_NAME = "Banjul City Center, The Gambia"
+        const val DEFAULT_LOCATION_NAME = "Albert Market Main Gate, Banjul"
     }
 }
 
 /**
- * Utility functions for checking location permissions and querying FusedLocationProviderClient.
+ * Utility functions for checking location permissions, tracking live location,
+ * and resolving pick-up points across Banjul and Kanifing.
  */
 object LocationUtils {
 
@@ -62,8 +67,8 @@ object LocationUtils {
     }
 
     /**
-     * Retrieves current location using FusedLocationProviderClient.
-     * Handles success, permission denial, or location service unavailability gracefully.
+     * Retrieves current location using FusedLocationProviderClient and identifies
+     * the optimal designated pick-up point in Banjul or Kanifing.
      */
     @SuppressLint("MissingPermission")
     fun fetchCurrentLocation(
@@ -71,15 +76,27 @@ object LocationUtils {
         onResult: (UserLocationState) -> Unit
     ) {
         if (!hasLocationPermission(context)) {
+            val pickupInfo = LocationTrackingService.identifyPickupPoint(
+                UserLocationState.DEFAULT_GAMBIA_LAT,
+                UserLocationState.DEFAULT_GAMBIA_LNG
+            )
             onResult(
                 UserLocationState(
                     latitude = UserLocationState.DEFAULT_GAMBIA_LAT,
                     longitude = UserLocationState.DEFAULT_GAMBIA_LNG,
-                    locationName = UserLocationState.DEFAULT_LOCATION_NAME,
+                    locationName = pickupInfo.closestPickupPoint.name,
                     isPermissionGranted = false,
                     isLoading = false,
-                    errorMessage = "Location permission denied. Using default Gambia pickup point.",
-                    isFallbackLocation = true
+                    errorMessage = "Location permission denied. Using default Banjul pickup point.",
+                    isFallbackLocation = true,
+                    detectedZone = pickupInfo.zoneName,
+                    closestPickupPointName = pickupInfo.closestPickupPoint.name,
+                    pickupGuidance = pickupInfo.closestPickupPoint.pickupGuidance,
+                    distanceToPickupMeters = pickupInfo.distanceMeters,
+                    recommendedPickups = LocationTrackingService.computeRecommendations(
+                        UserLocationState.DEFAULT_GAMBIA_LAT,
+                        UserLocationState.DEFAULT_GAMBIA_LNG
+                    )
                 )
             )
             return
@@ -96,82 +113,144 @@ object LocationUtils {
                 cancellationTokenSource.token
             ).addOnSuccessListener { location: Location? ->
                 if (location != null) {
+                    val pickupInfo = LocationTrackingService.identifyPickupPoint(location.latitude, location.longitude)
+                    val recs = LocationTrackingService.computeRecommendations(location.latitude, location.longitude)
                     onResult(
                         UserLocationState(
                             latitude = location.latitude,
                             longitude = location.longitude,
-                            locationName = "Current GPS Location",
+                            locationName = pickupInfo.suggestedPickupName,
                             isPermissionGranted = true,
                             isLoading = false,
                             errorMessage = null,
-                            isFallbackLocation = false
+                            isFallbackLocation = false,
+                            detectedZone = pickupInfo.zoneName,
+                            closestPickupPointName = pickupInfo.closestPickupPoint.name,
+                            pickupGuidance = pickupInfo.closestPickupPoint.pickupGuidance,
+                            distanceToPickupMeters = pickupInfo.distanceMeters,
+                            recommendedPickups = recs
                         )
                     )
                 } else {
                     // Try last known location as fallback
                     fusedLocationClient.lastLocation.addOnSuccessListener { lastLoc: Location? ->
                         if (lastLoc != null) {
+                            val pickupInfo = LocationTrackingService.identifyPickupPoint(lastLoc.latitude, lastLoc.longitude)
+                            val recs = LocationTrackingService.computeRecommendations(lastLoc.latitude, lastLoc.longitude)
                             onResult(
                                 UserLocationState(
                                     latitude = lastLoc.latitude,
                                     longitude = lastLoc.longitude,
-                                    locationName = "Last Known Location",
+                                    locationName = pickupInfo.suggestedPickupName,
                                     isPermissionGranted = true,
                                     isLoading = false,
                                     errorMessage = null,
-                                    isFallbackLocation = false
+                                    isFallbackLocation = false,
+                                    detectedZone = pickupInfo.zoneName,
+                                    closestPickupPointName = pickupInfo.closestPickupPoint.name,
+                                    pickupGuidance = pickupInfo.closestPickupPoint.pickupGuidance,
+                                    distanceToPickupMeters = pickupInfo.distanceMeters,
+                                    recommendedPickups = recs
                                 )
                             )
                         } else {
+                            val pickupInfo = LocationTrackingService.identifyPickupPoint(
+                                UserLocationState.DEFAULT_GAMBIA_LAT,
+                                UserLocationState.DEFAULT_GAMBIA_LNG
+                            )
                             onResult(
                                 UserLocationState(
                                     latitude = UserLocationState.DEFAULT_GAMBIA_LAT,
                                     longitude = UserLocationState.DEFAULT_GAMBIA_LNG,
-                                    locationName = UserLocationState.DEFAULT_LOCATION_NAME,
+                                    locationName = pickupInfo.closestPickupPoint.name,
                                     isPermissionGranted = true,
                                     isLoading = false,
                                     errorMessage = "GPS signal unavailable. Defaulting to Banjul Center.",
-                                    isFallbackLocation = true
+                                    isFallbackLocation = true,
+                                    detectedZone = pickupInfo.zoneName,
+                                    closestPickupPointName = pickupInfo.closestPickupPoint.name,
+                                    pickupGuidance = pickupInfo.closestPickupPoint.pickupGuidance,
+                                    distanceToPickupMeters = pickupInfo.distanceMeters,
+                                    recommendedPickups = LocationTrackingService.computeRecommendations(
+                                        UserLocationState.DEFAULT_GAMBIA_LAT,
+                                        UserLocationState.DEFAULT_GAMBIA_LNG
+                                    )
                                 )
                             )
                         }
                     }.addOnFailureListener {
+                        val pickupInfo = LocationTrackingService.identifyPickupPoint(
+                            UserLocationState.DEFAULT_GAMBIA_LAT,
+                            UserLocationState.DEFAULT_GAMBIA_LNG
+                        )
                         onResult(
                             UserLocationState(
                                 latitude = UserLocationState.DEFAULT_GAMBIA_LAT,
                                 longitude = UserLocationState.DEFAULT_GAMBIA_LNG,
-                                locationName = UserLocationState.DEFAULT_LOCATION_NAME,
+                                locationName = pickupInfo.closestPickupPoint.name,
                                 isPermissionGranted = true,
                                 isLoading = false,
                                 errorMessage = "Failed to fetch GPS location. Defaulting to Banjul Center.",
-                                isFallbackLocation = true
+                                isFallbackLocation = true,
+                                detectedZone = pickupInfo.zoneName,
+                                closestPickupPointName = pickupInfo.closestPickupPoint.name,
+                                pickupGuidance = pickupInfo.closestPickupPoint.pickupGuidance,
+                                distanceToPickupMeters = pickupInfo.distanceMeters,
+                                recommendedPickups = LocationTrackingService.computeRecommendations(
+                                    UserLocationState.DEFAULT_GAMBIA_LAT,
+                                    UserLocationState.DEFAULT_GAMBIA_LNG
+                                )
                             )
                         )
                     }
                 }
             }.addOnFailureListener { e ->
+                val pickupInfo = LocationTrackingService.identifyPickupPoint(
+                    UserLocationState.DEFAULT_GAMBIA_LAT,
+                    UserLocationState.DEFAULT_GAMBIA_LNG
+                )
                 onResult(
                     UserLocationState(
                         latitude = UserLocationState.DEFAULT_GAMBIA_LAT,
                         longitude = UserLocationState.DEFAULT_GAMBIA_LNG,
-                        locationName = UserLocationState.DEFAULT_LOCATION_NAME,
+                        locationName = pickupInfo.closestPickupPoint.name,
                         isPermissionGranted = true,
                         isLoading = false,
                         errorMessage = "Location error: ${e.localizedMessage ?: "Unknown error"}. Using fallback location.",
-                        isFallbackLocation = true
+                        isFallbackLocation = true,
+                        detectedZone = pickupInfo.zoneName,
+                        closestPickupPointName = pickupInfo.closestPickupPoint.name,
+                        pickupGuidance = pickupInfo.closestPickupPoint.pickupGuidance,
+                        distanceToPickupMeters = pickupInfo.distanceMeters,
+                        recommendedPickups = LocationTrackingService.computeRecommendations(
+                            UserLocationState.DEFAULT_GAMBIA_LAT,
+                            UserLocationState.DEFAULT_GAMBIA_LNG
+                        )
                     )
                 )
             }
         } catch (e: Exception) {
+            val pickupInfo = LocationTrackingService.identifyPickupPoint(
+                UserLocationState.DEFAULT_GAMBIA_LAT,
+                UserLocationState.DEFAULT_GAMBIA_LNG
+            )
             onResult(
                 UserLocationState(
                     latitude = UserLocationState.DEFAULT_GAMBIA_LAT,
                     longitude = UserLocationState.DEFAULT_GAMBIA_LNG,
-                    locationName = UserLocationState.DEFAULT_LOCATION_NAME,
+                    locationName = pickupInfo.closestPickupPoint.name,
                     isPermissionGranted = false,
                     isLoading = false,
                     errorMessage = "Error initializing GPS: ${e.localizedMessage}",
-                    isFallbackLocation = true
+                    isFallbackLocation = true,
+                    detectedZone = pickupInfo.zoneName,
+                    closestPickupPointName = pickupInfo.closestPickupPoint.name,
+                    pickupGuidance = pickupInfo.closestPickupPoint.pickupGuidance,
+                    distanceToPickupMeters = pickupInfo.distanceMeters,
+                    recommendedPickups = LocationTrackingService.computeRecommendations(
+                        UserLocationState.DEFAULT_GAMBIA_LAT,
+                        UserLocationState.DEFAULT_GAMBIA_LNG
+                    )
                 )
             )
         }

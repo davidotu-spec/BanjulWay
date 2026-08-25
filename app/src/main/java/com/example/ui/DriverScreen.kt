@@ -96,7 +96,7 @@ fun DriverScreen(
             onVerifyOtp = { code -> viewModel.verifyOtp(code) },
             onEmailChange = { viewModel.setDriverEmail(it) },
             onPassChange = { viewModel.setDriverPassword(it) },
-            onLoginSubmit = { viewModel.loginDriverWithEmail() },
+            onLoginSubmit = { em, pw -> viewModel.loginDriverWithEmail(em, pw) },
             onQuickDriverSelect = { email, pass ->
                 viewModel.setDriverEmail(email)
                 viewModel.setDriverPassword(pass)
@@ -3354,7 +3354,7 @@ fun DriverAuthView(
     onVerifyOtp: (String) -> Unit = {},
     onEmailChange: (String) -> Unit,
     onPassChange: (String) -> Unit,
-    onLoginSubmit: () -> Unit,
+    onLoginSubmit: (String, String) -> Unit,
     onQuickDriverSelect: (String, String) -> Unit,
     onRegisterSubmit: (email: String, pass: String, name: String, vehicleType: String, vehiclePlate: String, licenseNum: String, onError: (String) -> Unit) -> Unit = { _, _, _, _, _, _, _ -> },
     onGoogleDriverAuth: (email: String, name: String, pass: String, vehicleType: String, vehiclePlate: String, licenseNum: String, isRegister: Boolean, onError: (String) -> Unit) -> Unit = { _, _, _, _, _, _, _, _ -> },
@@ -3413,7 +3413,7 @@ fun DriverAuthView(
             onEmailLoginSubmit = { em, pw ->
                 onEmailChange(em)
                 onPassChange(pw)
-                onLoginSubmit()
+                onLoginSubmit(em, pw)
             },
             onEmailRegisterSubmit = { em, pw, nm, vt, vp, ln, errCb ->
                 onEmailChange(em)

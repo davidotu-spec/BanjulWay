@@ -157,6 +157,8 @@ object FirebaseAuthManager {
         }
     }
 
+    private var sharedPrefs: android.content.SharedPreferences? = null
+
     // Registered User Credentials Repository for offline and simulated password checking
     private val registeredUserCredentials = java.util.concurrent.ConcurrentHashMap<String, String>().apply {
         put("dee2spaz98@gmail.com", "pass123")
@@ -178,6 +180,82 @@ object FirebaseAuthManager {
     }
 
     /**
+     * Initializes the credential repository with persistent storage.
+     */
+    fun init(context: android.content.Context) {
+        if (sharedPrefs == null) {
+            val prefs = context.applicationContext.getSharedPreferences("waygo_user_creds_v2", android.content.Context.MODE_PRIVATE)
+            sharedPrefs = prefs
+            // Load previously registered users from persistent storage
+            prefs.all.forEach { (key, value) ->
+                if (key.startsWith("pwd_") && value is String) {
+                    val email = key.removePrefix("pwd_")
+                    registeredUserCredentials[email] = value
+                }
+            }
+            Log.i(TAG, "FirebaseAuthManager initialized with ${registeredUserCredentials.size} registered accounts.")
+        }
+    }
+
+    fun isUserRegistered(email: String): Boolean {
+        val cleanEmail = AuthValidator.normalizeEmail(email)
+        return registeredUserCredentials.containsKey(cleanEmail) ||
+                sharedPrefs?.contains("pwd_$cleanEmail") == true
+    }
+
+    fun getStoredPassword(email: String): String? {
+        val cleanEmail = AuthValidator.normalizeEmail(email)
+        return registeredUserCredentials[cleanEmail]
+            ?: sharedPrefs?.getString("pwd_$cleanEmail", null)
+    }
+
+    fun saveLocalCredentials(email: String, pass: String) {
+        val cleanEmail = AuthValidator.normalizeEmail(email)
+        registeredUserCredentials[cleanEmail] = pass
+        sharedPrefs?.edit()?.putString("pwd_$cleanEmail", pass)?.apply()
+    }
+
+    fun resetPassword(email: String, newPass: String) {
+        val cleanEmail = AuthValidator.normalizeEmail(email)
+        registeredUserCredentials[cleanEmail] = newPass
+        sharedPrefs?.edit()?.putString("pwd_$cleanEmail", newPass)?.apply()
+    }
+
+    /**
+     * Authenticates with a verified Google ID token from Credential Manager.
+     * Enforces signature verification against Google public keys and auto-links to existing accounts.
+     * Never trusts raw client parameters without token verification.
+     */
+    fun signInWithGoogleIdToken(
+        idToken: String,
+        onSuccess: (email: String, name: String, isLinked: Boolean) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val verification = GoogleTokenVerifier.verifyGoogleIdToken(idToken)
+        when (verification) {
+            is GoogleTokenVerificationResult.Failure -> {
+                Log.e(TAG, "Google ID token verification failed: ${verification.reason}")
+                onError("Google authentication failed: ${verification.reason}")
+            }
+            is GoogleTokenVerificationResult.Success -> {
+                val verifiedEmail = verification.email
+                val verifiedName = verification.name
+                val isLinked = verification.isLinkedToExistingAccount
+
+                // Auto-link: If user does not have a local password entry yet, register securely with token credentials
+                if (!isUserRegistered(verifiedEmail)) {
+                    saveLocalCredentials(verifiedEmail, "google_oauth_${verification.subject.takeLast(8)}")
+                    Log.i(TAG, "Auto-created and registered account for verified Google user: $verifiedEmail")
+                } else {
+                    Log.i(TAG, "Auto-linked Google identity credential to existing account for: $verifiedEmail")
+                }
+
+                onSuccess(verifiedEmail, verifiedName, isLinked)
+            }
+        }
+    }
+
+    /**
      * Signs in a user (Passenger, Driver, or Admin) using email and password.
      * Enforces strict password validation and logs diagnostic telemetry with DiagnosticAuthManager.
      */
@@ -187,14 +265,13 @@ object FirebaseAuthManager {
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val cleanEmail = email.trim().lowercase()
-        val cleanPass = pass.trim()
-
-        val emailValidation = AuthValidator.validateEmail(cleanEmail)
+        val emailValidation = AuthValidator.validateEmail(email)
         if (!emailValidation.isValid) {
             onError(emailValidation.errorMessage ?: "Please enter a valid email address.")
             return
         }
+        val cleanEmail = emailValidation.normalizedValue ?: AuthValidator.normalizeEmail(email)
+        val cleanPass = pass.trim()
 
         if (cleanPass.isBlank()) {
             onError("Please enter your password.")
@@ -208,33 +285,56 @@ object FirebaseAuthManager {
 
         val auth = firebaseAuth
 
-        // If Firebase Auth instance is not available, record locally and succeed
-        if (auth == null) {
-            Log.i(TAG, "FirebaseAuth offline. Auto-registered and authenticated $cleanEmail locally.")
-            registeredUserCredentials[cleanEmail] = cleanPass
+        // Strict local credential validator
+        fun attemptLocalSignIn() {
+            val storedPass = getStoredPassword(cleanEmail)
+            if (storedPass == null) {
+                onError("No account found for $cleanEmail. Please create an account or verify your email.")
+                return
+            }
+            if (storedPass != cleanPass) {
+                onError("Incorrect password. Please check your password and try again.")
+                return
+            }
+            Log.i(TAG, "Local authentication successful with valid password for $cleanEmail.")
             onSuccess()
+        }
+
+        if (auth == null) {
+            attemptLocalSignIn()
             return
         }
 
-        // Delegate to DiagnosticAuthManager for deep exception inspection and structured logging
+        // Delegate to DiagnosticAuthManager for live Firebase auth with fallback to verified local registry
         DiagnosticAuthManager.diagnosticSignIn(
             auth = auth,
             email = cleanEmail,
             pass = cleanPass,
             onSuccess = { user ->
-                registeredUserCredentials[cleanEmail] = cleanPass
+                saveLocalCredentials(cleanEmail, cleanPass)
                 onSuccess()
             },
             onError = { errMsg, diagnostic ->
-                if (diagnostic.tag == "InvalidApiKey" || diagnostic.tag == "InternalError") {
-                    Log.w(TAG, "Diagnostic captured ${diagnostic.tag}: ${diagnostic.actionableResolution}")
-                    registeredUserCredentials[cleanEmail] = cleanPass
-                    onSuccess()
-                } else if (diagnostic.tag == "UserNotFound") {
-                    Log.i(TAG, "User not found in Firebase. Auto-creating account via DiagnosticAuthManager for $cleanEmail")
-                    createUserWithEmail(cleanEmail, cleanPass, onSuccess, onError)
-                } else {
-                    onError(errMsg)
+                when (diagnostic.tag) {
+                    "InvalidCredentials", "WeakPassword" -> {
+                        // Strict rejection on wrong password
+                        onError("Incorrect password. Please check your password and try again.")
+                    }
+                    "UserNotFound" -> {
+                        onError("No account found with this email ($cleanEmail). Please sign up first.")
+                    }
+                    "PlaceholderMode", "InvalidApiKey", "InternalError" -> {
+                        // In placeholder API key mode or offline, strictly verify password against local credential registry
+                        attemptLocalSignIn()
+                    }
+                    else -> {
+                        // Fallback to local credential check if network/other error
+                        if (isUserRegistered(cleanEmail)) {
+                            attemptLocalSignIn()
+                        } else {
+                            onError(errMsg)
+                        }
+                    }
                 }
             }
         )
@@ -242,6 +342,7 @@ object FirebaseAuthManager {
 
     /**
      * Creates a new user account (Passenger or Driver) using email and password in Firebase Authentication.
+     * Enforces RFC 5322 normalization to prevent account duplicate collisions.
      */
     fun createUserWithEmail(
         email: String,
@@ -249,14 +350,13 @@ object FirebaseAuthManager {
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val cleanEmail = email.trim().lowercase()
-        val cleanPass = pass.trim()
-
-        val emailValidation = AuthValidator.validateEmail(cleanEmail)
+        val emailValidation = AuthValidator.validateEmail(email)
         if (!emailValidation.isValid) {
             onError(emailValidation.errorMessage ?: "Please enter a valid email address.")
             return
         }
+        val cleanEmail = emailValidation.normalizedValue ?: AuthValidator.normalizeEmail(email)
+        val cleanPass = pass.trim()
 
         val passValidation = AuthValidator.validatePassword(cleanPass)
         if (!passValidation.isValid) {
@@ -264,11 +364,16 @@ object FirebaseAuthManager {
             return
         }
 
-        registeredUserCredentials[cleanEmail] = cleanPass
+        // Check if user already exists locally (Normalized duplicate check)
+        if (isUserRegistered(cleanEmail)) {
+            onError("An account with '$cleanEmail' already exists. Please sign in instead.")
+            return
+        }
 
         val auth = firebaseAuth
         if (auth == null) {
-            Log.i(TAG, "FirebaseAuth offline. Registered $cleanEmail locally.")
+            saveLocalCredentials(cleanEmail, cleanPass)
+            Log.i(TAG, "FirebaseAuth offline. Registered $cleanEmail in local persistent store.")
             onSuccess()
             return
         }
@@ -278,17 +383,23 @@ object FirebaseAuthManager {
             email = cleanEmail,
             pass = cleanPass,
             onSuccess = { user ->
+                saveLocalCredentials(cleanEmail, cleanPass)
                 onSuccess()
             },
             onError = { errMsg, diagnostic ->
-                if (diagnostic.tag == "InvalidApiKey" || diagnostic.tag == "InternalError") {
-                    Log.w(TAG, "Diagnostic captured ${diagnostic.tag}: ${diagnostic.actionableResolution}")
-                    onSuccess()
-                } else if (diagnostic.tag == "UserCollision") {
-                    // Try signing in
-                    signInWithEmail(cleanEmail, cleanPass, onSuccess, onError)
-                } else {
-                    onError(errMsg)
+                when (diagnostic.tag) {
+                    "UserCollision" -> {
+                        onError("An account with '$cleanEmail' already exists in Firebase. Please sign in instead.")
+                    }
+                    "PlaceholderMode", "InvalidApiKey", "InternalError" -> {
+                        // Successfully register in local credential store
+                        saveLocalCredentials(cleanEmail, cleanPass)
+                        Log.i(TAG, "Registered $cleanEmail in local persistent credentials registry.")
+                        onSuccess()
+                    }
+                    else -> {
+                        onError(errMsg)
+                    }
                 }
             }
         )

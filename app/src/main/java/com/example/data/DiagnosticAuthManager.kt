@@ -150,7 +150,7 @@ object DiagnosticAuthManager {
         auth: FirebaseAuth?,
         email: String,
         pass: String,
-        onSuccess: (FirebaseUser) -> Unit,
+        onSuccess: (FirebaseUser?) -> Unit,
         onError: (String, AuthDiagnosticLog) -> Unit
     ) {
         val cleanEmail = email.trim()
@@ -165,12 +165,29 @@ object DiagnosticAuthManager {
 
         if (auth == null) {
             val diagnostic = log(
-                level = LogLevel.CRITICAL,
-                tag = "SignInError",
-                message = "FirebaseAuth instance is null. Firebase is uninitialized.",
-                actionableResolution = "Check application initialization in WayGoApplication."
+                level = LogLevel.WARN,
+                tag = "PlaceholderMode",
+                message = "FirebaseAuth instance is null. Live Firebase sign in unavailable.",
+                actionableResolution = "Proceeding with local credential authentication."
             )
             onError("FirebaseAuth is not initialized.", diagnostic)
+            return
+        }
+
+        val app = FirebaseApp.getInstance()
+        val apiKey = app.options.apiKey
+        val isPlaceholder = apiKey.contains("Placeholder", ignoreCase = true) ||
+                apiKey.length < 20 ||
+                !apiKey.startsWith("AIza")
+
+        if (isPlaceholder) {
+            val diagnostic = log(
+                level = LogLevel.INFO,
+                tag = "PlaceholderMode",
+                message = "Live Firebase sign in skipped (google-services.json using placeholder key).",
+                actionableResolution = "Delegating to verified local credential registry."
+            )
+            onError("PlaceholderMode", diagnostic)
             return
         }
 
@@ -228,7 +245,7 @@ object DiagnosticAuthManager {
         auth: FirebaseAuth?,
         email: String,
         pass: String,
-        onSuccess: (FirebaseUser) -> Unit,
+        onSuccess: (FirebaseUser?) -> Unit,
         onError: (String, AuthDiagnosticLog) -> Unit
     ) {
         val cleanEmail = email.trim()
@@ -243,12 +260,29 @@ object DiagnosticAuthManager {
 
         if (auth == null) {
             val diagnostic = log(
-                level = LogLevel.CRITICAL,
-                tag = "CreateUserError",
-                message = "FirebaseAuth instance is null. Firebase is uninitialized.",
-                actionableResolution = "Check application initialization in WayGoApplication."
+                level = LogLevel.WARN,
+                tag = "PlaceholderMode",
+                message = "FirebaseAuth instance is null. Live Firebase user creation unavailable.",
+                actionableResolution = "Account will be stored in local persistent credential registry."
             )
             onError("FirebaseAuth is not initialized.", diagnostic)
+            return
+        }
+
+        val app = FirebaseApp.getInstance()
+        val apiKey = app.options.apiKey
+        val isPlaceholder = apiKey.contains("Placeholder", ignoreCase = true) ||
+                apiKey.length < 20 ||
+                !apiKey.startsWith("AIza")
+
+        if (isPlaceholder) {
+            val diagnostic = log(
+                level = LogLevel.INFO,
+                tag = "PlaceholderMode",
+                message = "Live Firebase user creation skipped (google-services.json using placeholder key).",
+                actionableResolution = "Delegating to local persistent credential registry."
+            )
+            onError("PlaceholderMode", diagnostic)
             return
         }
 
