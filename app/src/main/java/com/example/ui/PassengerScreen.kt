@@ -514,18 +514,6 @@ fun PassengerAuthView(
     var secretPasskeyError by remember { mutableStateOf("") }
     var showGoogleAuthDialog by remember { mutableStateOf(false) }
 
-    var authModeTab by remember { mutableStateOf(0) } // 0 = Phone SMS OTP, 1 = Email / Password
-    var phoneInput by remember { mutableStateOf("") }
-    var otpCodeInput by remember { mutableStateOf("") }
-    var countryPrefix by remember { mutableStateOf("+220") }
-
-    var isEmailRegisterMode by remember { mutableStateOf(false) }
-    var emailInput by remember { mutableStateOf("") }
-    var passwordInput by remember { mutableStateOf("") }
-    var nameInput by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var localError by remember { mutableStateOf("") }
-
     if (showGoogleAuthDialog) {
         GoogleAccountAuthDialog(
             userRole = "PASSENGER",
