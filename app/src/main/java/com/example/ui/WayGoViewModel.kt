@@ -101,6 +101,31 @@ class WayGoViewModel(
         initialValue = emptyList()
     )
 
+    // Room Past Ride History Table Flow
+    val allPastRides = repository.allPastRidesFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    fun recordPastRide(ride: PastRideHistoryEntity) {
+        viewModelScope.launch {
+            repository.savePastRide(ride)
+        }
+    }
+
+    fun deletePastRide(rideId: String) {
+        viewModelScope.launch {
+            repository.deletePastRide(rideId)
+        }
+    }
+
+    fun clearAllPastRides() {
+        viewModelScope.launch {
+            repository.clearAllPastRides()
+        }
+    }
+
     // Firestore Trip History states
     private val _firestoreTrips = MutableStateFlow<List<TripEntity>>(emptyList())
     val firestoreTrips: StateFlow<List<TripEntity>> = _firestoreTrips.asStateFlow()
@@ -2042,6 +2067,36 @@ class WayGoViewModel(
             _simulatedDriverLng.value = trip.dropoffLng
             _simulationProgress.value = 1.0f
             repository.updateDriverLocation(driver.id, trip.dropoffLat, trip.dropoffLng)
+
+            // Record into Room Past Ride History table
+            val dateFmt = try {
+                val instant = java.time.Instant.ofEpochMilli(trip.timestamp)
+                val formatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm")
+                    .withZone(java.time.ZoneId.systemDefault())
+                formatter.format(instant)
+            } catch (e: Exception) {
+                "Recent Date"
+            }
+            repository.savePastRide(
+                PastRideHistoryEntity(
+                    id = "past_${trip.id}",
+                    pickupLocation = trip.pickupName,
+                    destination = trip.dropoffName,
+                    dateFormatted = dateFmt,
+                    timestamp = trip.timestamp,
+                    fareGmd = trip.fareGmd,
+                    driverName = driver.name,
+                    vehicleType = trip.vehicleType,
+                    vehiclePlate = trip.vehiclePlate ?: driver.vehiclePlate,
+                    paymentMethod = trip.paymentMethod,
+                    status = "COMPLETED",
+                    rating = 5.0f,
+                    distanceKm = 5.0,
+                    durationMinutes = 15,
+                    notes = "Completed journey from ${trip.pickupName} to ${trip.dropoffName}",
+                    tipGmd = trip.tipGmd
+                )
+            )
 
             triggerDriverPushNotification(
                 driverId = "passenger_alert",

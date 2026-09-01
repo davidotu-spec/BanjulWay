@@ -43,7 +43,7 @@ object TripFareEstimationService {
     private const val AVERAGE_SPEED_KMH = 25.0
 
     /**
-     * Calculates Haversine distance in kilometers between two GPS coordinates.
+     * Calculates Haversine distance in kilometers between two GPS coordinates (origin and destination).
      */
     fun calculateDistanceKm(
         pLat: Double, pLng: Double,
@@ -69,24 +69,27 @@ object TripFareEstimationService {
     }
 
     /**
-     * Estimates fare given pickup and dropoff coordinates and vehicle type.
+     * Primary function to calculate an estimated fare based on the distance between
+     * origin (pickup) and destination (drop-off) coordinates.
      */
-    fun estimateFare(
-        pLat: Double, pLng: Double,
-        dLat: Double, dLng: Double,
-        vehicleType: String,
+    fun calculateEstimatedFare(
+        originLat: Double,
+        originLng: Double,
+        destLat: Double,
+        destLng: Double,
+        vehicleType: String = "CAR",
         surchargeTier: String = "STANDARD"
     ): FareEstimateResult {
-        val distanceKm = calculateDistanceKm(pLat, pLng, dLat, dLng)
-        return estimateFareByDistance(distanceKm, vehicleType, surchargeTier)
+        val distanceKm = calculateDistanceKm(originLat, originLng, destLat, destLng)
+        return calculateEstimatedFareByDistance(distanceKm, vehicleType, surchargeTier)
     }
 
     /**
-     * Estimates fare given distance in kilometers and vehicle type (CAR vs TRICYCLE).
+     * Calculates an estimated fare based directly on distance in kilometers and vehicle type.
      */
-    fun estimateFareByDistance(
+    fun calculateEstimatedFareByDistance(
         distanceKm: Double,
-        vehicleType: String,
+        vehicleType: String = "CAR",
         surchargeTier: String = "STANDARD"
     ): FareEstimateResult {
         val isCar = vehicleType.uppercase().contains("CAR")
@@ -95,7 +98,7 @@ object TripFareEstimationService {
         val perKmRate = if (isCar) CAR_PER_KM_RATE else TRICYCLE_PER_KM_RATE
         val perMinRate = if (isCar) CAR_PER_MIN_RATE else TRICYCLE_PER_MIN_RATE
         val minFare = if (isCar) CAR_MIN_FARE else TRICYCLE_MIN_FARE
-        val displayName = if (isCar) "Taxi / Car" else "Tricycle"
+        val displayName = if (isCar) "Taxi / Car" else "Tricycle (Keke)"
 
         val durationMinutes = estimateDurationMinutes(distanceKm)
 
@@ -130,6 +133,29 @@ object TripFareEstimationService {
             vehicleType = if (isCar) "CAR" else "TRICYCLE",
             vehicleDisplayName = displayName
         )
+    }
+
+    /**
+     * Estimates fare given pickup and dropoff coordinates and vehicle type (compatibility alias).
+     */
+    fun estimateFare(
+        pLat: Double, pLng: Double,
+        dLat: Double, dLng: Double,
+        vehicleType: String,
+        surchargeTier: String = "STANDARD"
+    ): FareEstimateResult {
+        return calculateEstimatedFare(pLat, pLng, dLat, dLng, vehicleType, surchargeTier)
+    }
+
+    /**
+     * Estimates fare given distance in kilometers and vehicle type (compatibility alias).
+     */
+    fun estimateFareByDistance(
+        distanceKm: Double,
+        vehicleType: String,
+        surchargeTier: String = "STANDARD"
+    ): FareEstimateResult {
+        return calculateEstimatedFareByDistance(distanceKm, vehicleType, surchargeTier)
     }
 
     /**

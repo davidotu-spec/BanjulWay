@@ -779,22 +779,40 @@ fun HomeScreenContent(
         }
     }
 
-    // Trip Fare Estimation Service computation
-    val carFareEstimate = remember(pCoordinates, dCoordinates) {
+    // Trip Fare Estimation Service computation based on distance between origin and destination
+    val currentFareEstimateResult = remember(pCoordinates, dCoordinates, selectVehicleType) {
         val pL = pCoordinates?.lat ?: 13.4471
         val pG = pCoordinates?.lng ?: -16.6791
         val dL = dCoordinates?.lat ?: 13.4533
         val dG = dCoordinates?.lng ?: -16.5746
-        TripFareEstimationService.estimateFare(pL, pG, dL, dG, "CAR").finalFareGmd
+        TripFareEstimationService.calculateEstimatedFare(
+            originLat = pL,
+            originLng = pG,
+            destLat = dL,
+            destLng = dG,
+            vehicleType = selectVehicleType
+        )
     }
-    val tricycleFareEstimate = remember(pCoordinates, dCoordinates) {
+
+    val carFareResult = remember(pCoordinates, dCoordinates) {
         val pL = pCoordinates?.lat ?: 13.4471
         val pG = pCoordinates?.lng ?: -16.6791
         val dL = dCoordinates?.lat ?: 13.4533
         val dG = dCoordinates?.lng ?: -16.5746
-        TripFareEstimationService.estimateFare(pL, pG, dL, dG, "TRICYCLE").finalFareGmd
+        TripFareEstimationService.calculateEstimatedFare(pL, pG, dL, dG, "CAR")
     }
-    val estimatedFare = if (selectVehicleType == "CAR") carFareEstimate else tricycleFareEstimate
+    val tricycleFareResult = remember(pCoordinates, dCoordinates) {
+        val pL = pCoordinates?.lat ?: 13.4471
+        val pG = pCoordinates?.lng ?: -16.6791
+        val dL = dCoordinates?.lat ?: 13.4533
+        val dG = dCoordinates?.lng ?: -16.5746
+        TripFareEstimationService.calculateEstimatedFare(pL, pG, dL, dG, "TRICYCLE")
+    }
+
+    val carFareEstimate = carFareResult.finalFareGmd
+    val tricycleFareEstimate = tricycleFareResult.finalFareGmd
+    val estimatedFare = currentFareEstimateResult.finalFareGmd
+
     LaunchedEffect(estimatedFare) {
         dynamicCalculatedFare = estimatedFare
     }
@@ -1803,6 +1821,234 @@ fun HomeScreenContent(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        // 🏷️ ESTIMATED FARE & ROUTE DISTANCE BREAKDOWN CARD (Displayed before confirming ride)
+                        var showFareBreakdownDetails by remember { mutableStateOf(false) }
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("estimated_fare_display_card"),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = BrandBluePrimary.copy(alpha = 0.05f)
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, BrandBluePrimary.copy(alpha = 0.35f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = BrandBluePrimary,
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ReceiptLong,
+                                                    contentDescription = "Fare Estimate",
+                                                    tint = PureWhite,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = "Estimated Fare",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = BrandBlueDark
+                                            )
+                                            Text(
+                                                text = "Calculated by route distance",
+                                                fontSize = 10.sp,
+                                                color = NeutralGray
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = SuccessGreen.copy(alpha = 0.12f),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.4f))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Verified,
+                                                contentDescription = null,
+                                                tint = SuccessGreen,
+                                                modifier = Modifier.size(11.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                text = "Price Locked",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = SuccessGreen
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                // Main Price & Key Metrics Row
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Bottom
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "${currentFareEstimateResult.finalFareGmd} GMD",
+                                            fontSize = 24.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = BrandBluePrimary,
+                                            modifier = Modifier.testTag("estimated_fare_value_text")
+                                        )
+                                        Text(
+                                            text = currentFareEstimateResult.vehicleDisplayName,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = BrandBlueDark.copy(alpha = 0.8f)
+                                        )
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = PureWhite,
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                                                    .testTag("estimated_distance_value_text"),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Navigation,
+                                                    contentDescription = null,
+                                                    tint = BrandBluePrimary,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "${currentFareEstimateResult.distanceKm} km",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BrandBlueDark
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = PureWhite,
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Schedule,
+                                                    contentDescription = null,
+                                                    tint = AccentAmber,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "~${currentFareEstimateResult.estimatedDurationMin} min",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = BrandBlueDark
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Collapsible Detailed Itemized Breakdown
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showFareBreakdownDetails = !showFareBreakdownDetails }
+                                        .padding(vertical = 4.dp)
+                                        .testTag("fare_breakdown_toggle_btn"),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (showFareBreakdownDetails) "Hide Price Calculation ▲" else "View Calculation Breakdown ▼",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BrandBluePrimary
+                                    )
+                                    Text(
+                                        text = "Rate: ${currentFareEstimateResult.perKmRate.toInt()} GMD/km",
+                                        fontSize = 10.sp,
+                                        color = NeutralGray
+                                    )
+                                }
+
+                                if (showFareBreakdownDetails) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = PureWhite,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Base Starting Fare", fontSize = 11.sp, color = NeutralGray)
+                                                Text("${currentFareEstimateResult.baseFare.toInt()} GMD", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = BrandBlueDark)
+                                            }
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Distance (${currentFareEstimateResult.distanceKm} km × ${currentFareEstimateResult.perKmRate.toInt()} GMD)", fontSize = 11.sp, color = NeutralGray)
+                                                Text("${currentFareEstimateResult.distanceCharge.toInt()} GMD", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = BrandBlueDark)
+                                            }
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Estimated Time (${currentFareEstimateResult.estimatedDurationMin} min)", fontSize = 11.sp, color = NeutralGray)
+                                                Text("${currentFareEstimateResult.timeCharge.toInt()} GMD", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = BrandBlueDark)
+                                            }
+                                            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), thickness = 0.5.dp, color = Color(0xFFE2E8F0))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text("Final Estimated Total", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = BrandBlueDark)
+                                                Text("${currentFareEstimateResult.finalFareGmd} GMD", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = BrandBluePrimary)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         // Submit Button
                         Button(
                             onClick = {
@@ -1888,7 +2134,7 @@ fun HomeScreenContent(
                         ) {
                             Icon(Icons.Default.DirectionsCar, contentDescription = "r")
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Request WayGo Ride", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Request WayGo Ride • $dynamicCalculatedFare GMD", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -3014,7 +3260,7 @@ fun HistoryScreenContent(viewModel: WayGoViewModel) {
     val firestoreIsLoading by viewModel.firestoreIsLoading.collectAsState()
     val firestoreStatusMessage by viewModel.firestoreStatusMessage.collectAsState()
 
-    var selectedTab by remember { mutableStateOf("SCHEDULED") } // "SCHEDULED", "COMPLETED"
+    var selectedTab by remember { mutableStateOf("PAST_RIDES") } // "PAST_RIDES", "SCHEDULED", "COMPLETED"
     var viewCloudOnly by remember { mutableStateOf(true) } // toggles between Firestore Cloud and Local Database Cache
 
     val formatTimestamp = remember {
@@ -3040,7 +3286,11 @@ fun HistoryScreenContent(viewModel: WayGoViewModel) {
                 .padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            listOf("SCHEDULED" to "Scheduled Rides", "COMPLETED" to "Past Trips Log").forEach { (tabKey, tabLabel) ->
+            listOf(
+                "PAST_RIDES" to "Room History",
+                "SCHEDULED" to "Scheduled",
+                "COMPLETED" to "Cloud Trips"
+            ).forEach { (tabKey, tabLabel) ->
                 val isSel = selectedTab == tabKey
                 Box(
                     modifier = Modifier
@@ -3048,20 +3298,26 @@ fun HistoryScreenContent(viewModel: WayGoViewModel) {
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (isSel) BrandBluePrimary else Color.Transparent)
                         .clickable { selectedTab = tabKey }
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 10.dp)
+                        .testTag("tab_history_${tabKey.lowercase()}"),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tabLabel,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.5.sp,
+                        fontSize = 12.sp,
                         color = if (isSel) Color.White else BrandBlueDark
                     )
                 }
             }
         }
 
-        if (selectedTab == "SCHEDULED") {
+        if (selectedTab == "PAST_RIDES") {
+            PastRideHistoryView(
+                viewModel = viewModel,
+                modifier = Modifier.weight(1f)
+            )
+        } else if (selectedTab == "SCHEDULED") {
             // Filter passenger-owned scheduled rides
             val activeScheduled = scheduledRides.filter { it.status != "DISPATCHED" }
             if (activeScheduled.isEmpty()) {
@@ -3572,6 +3828,7 @@ fun ProfileScreenContent(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val trips by viewModel.allTrips.collectAsState()
+    val pastRides by viewModel.allPastRides.collectAsState()
     val isAdminLoggedIn by viewModel.isAdminLoggedIn.collectAsState()
     
     // Active Account Tab state: "PROFILE", "TRIP_LOG", "INBOX", "PAYMENT", "SAFETY", "SAVED_PLACES", "SETTINGS"
@@ -4189,9 +4446,10 @@ fun ProfileScreenContent(
 
         val unreadInboxCount = inboxMessages.count { !it.isRead }
 
-        val accountSections = remember(unreadInboxCount, trips.size, profile?.isPaymentLinked, isAdminLoggedIn) {
+        val accountSections = remember(unreadInboxCount, trips.size, pastRides.size, profile?.isPaymentLinked, isAdminLoggedIn) {
             buildList {
                 add(AccountSectionItem("PROFILE", "Profile", Icons.Default.Person, null))
+                add(AccountSectionItem("PAST_RIDES", "Ride History (Room)", Icons.Default.DirectionsCar, pastRides.size.takeIf { it > 0 }?.toString()))
                 add(AccountSectionItem("TRIP_LOG", "Trip Log", Icons.Default.History, trips.size.takeIf { it > 0 }?.toString()))
                 add(AccountSectionItem("INBOX", "Inbox", Icons.Default.Inbox, unreadInboxCount.takeIf { it > 0 }?.toString()))
                 add(AccountSectionItem("DRIVER_HUB", "Driver Hub", Icons.Default.TwoWheeler, "DRIVER"))
@@ -4272,6 +4530,12 @@ fun ProfileScreenContent(
 
         // FEATURE CONTENT SECTION BASED ON ACTIVE TAB
         when (activeAccountTab) {
+            "PAST_RIDES" -> {
+                PastRideHistoryView(
+                    viewModel = viewModel,
+                    onRebookRide = { _, _, _ -> onBack() }
+                )
+            }
             "TRIP_LOG" -> {
                 // 📜 1. TRIP LOG SECTION WITH ENHANCED FILTERS
                 val nowMs = System.currentTimeMillis()

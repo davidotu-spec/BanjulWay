@@ -110,4 +110,27 @@ interface WayGoDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateVehicleMileage(mileage: VehicleMileageEntity)
+
+    // Past Ride History (Local Room Database Table)
+    @Query("SELECT * FROM past_ride_history ORDER BY timestamp DESC")
+    fun getAllPastRideHistoryFlow(): Flow<List<PastRideHistoryEntity>>
+
+    @Query("SELECT * FROM past_ride_history WHERE id = :id LIMIT 1")
+    suspend fun getPastRideById(id: String): PastRideHistoryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPastRide(ride: PastRideHistoryEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPastRides(rides: List<PastRideHistoryEntity>)
+
+    @Query("DELETE FROM past_ride_history WHERE id = :id")
+    suspend fun deletePastRideById(id: String)
+
+    @Query("DELETE FROM past_ride_history")
+    suspend fun clearAllPastRides()
+
+    @Query("SELECT * FROM past_ride_history WHERE destination LIKE '%' || :query || '%' OR pickupLocation LIKE '%' || :query || '%' ORDER BY timestamp DESC")
+    fun searchPastRidesFlow(query: String): Flow<List<PastRideHistoryEntity>>
 }
+

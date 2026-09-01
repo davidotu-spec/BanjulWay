@@ -257,8 +257,8 @@ object LocationUtils {
     }
 
     /**
-     * Calculates an estimated fare based on the distance between the user's current location
-     * and a selected destination before a ride is requested.
+     * Calculates an estimated fare based on the distance between the user's current location (origin)
+     * and a selected destination before a ride is requested and confirmed.
      */
     fun calculateEstimatedFare(
         currentLat: Double,
@@ -268,11 +268,26 @@ object LocationUtils {
         vehicleType: String = "CAR",
         surchargeTier: String = "STANDARD"
     ): FareEstimateResult {
-        return TripFareEstimationService.estimateFare(
-            pLat = currentLat,
-            pLng = currentLng,
-            dLat = destLat,
-            dLng = destLng,
+        return TripFareEstimationService.calculateEstimatedFare(
+            originLat = currentLat,
+            originLng = currentLng,
+            destLat = destLat,
+            destLng = destLng,
+            vehicleType = vehicleType,
+            surchargeTier = surchargeTier
+        )
+    }
+
+    /**
+     * Calculates an estimated fare directly based on route distance in kilometers.
+     */
+    fun calculateEstimatedFareByDistance(
+        distanceKm: Double,
+        vehicleType: String = "CAR",
+        surchargeTier: String = "STANDARD"
+    ): FareEstimateResult {
+        return TripFareEstimationService.calculateEstimatedFareByDistance(
+            distanceKm = distanceKm,
             vehicleType = vehicleType,
             surchargeTier = surchargeTier
         )

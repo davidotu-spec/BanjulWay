@@ -117,4 +117,25 @@ data class VehicleMileageEntity(
     val lastNotifiedTireCheck: Double = 8000.0
 )
 
+@Entity(tableName = "past_ride_history")
+data class PastRideHistoryEntity(
+    @PrimaryKey val id: String,
+    val pickupLocation: String,
+    val destination: String,
+    val dateFormatted: String, // e.g. "30 Aug 2026, 19:45"
+    val timestamp: Long = System.currentTimeMillis(),
+    val fareGmd: Int,
+    val driverName: String,
+    val vehicleType: String, // "CAR", "TRICYCLE"
+    val vehiclePlate: String,
+    val paymentMethod: String, // "WAVE", "QMONEY", "AFRIMONEY", "CASH", "STRIPE"
+    val status: String = "COMPLETED", // "COMPLETED", "CANCELLED"
+    val rating: Float = 5.0f,
+    val distanceKm: Double = 3.5,
+    val durationMinutes: Int = 12,
+    val notes: String = "Smooth ride through Banjul/Kanifing",
+    val tipGmd: Int = 0
+)
+
+
 

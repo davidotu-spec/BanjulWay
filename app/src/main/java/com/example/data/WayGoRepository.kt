@@ -115,4 +115,28 @@ class WayGoRepository(private val dao: WayGoDao) {
     suspend fun saveVehicleMileage(mileage: VehicleMileageEntity) {
         dao.insertOrUpdateVehicleMileage(mileage)
     }
+
+    // Past Ride History (Room Database Table)
+    val allPastRidesFlow: Flow<List<PastRideHistoryEntity>> = dao.getAllPastRideHistoryFlow()
+
+    fun searchPastRidesFlow(query: String): Flow<List<PastRideHistoryEntity>> = dao.searchPastRidesFlow(query)
+
+    suspend fun getPastRideById(id: String): PastRideHistoryEntity? = dao.getPastRideById(id)
+
+    suspend fun savePastRide(ride: PastRideHistoryEntity) {
+        dao.insertPastRide(ride)
+    }
+
+    suspend fun savePastRides(rides: List<PastRideHistoryEntity>) {
+        dao.insertPastRides(rides)
+    }
+
+    suspend fun deletePastRide(id: String) {
+        dao.deletePastRideById(id)
+    }
+
+    suspend fun clearAllPastRides() {
+        dao.clearAllPastRides()
+    }
 }
+

@@ -17,9 +17,10 @@ import kotlinx.coroutines.launch
         SupportMessageEntity::class,
         ScheduledRideEntity::class,
         SavedPlaceEntity::class,
-        VehicleMileageEntity::class
+        VehicleMileageEntity::class,
+        PastRideHistoryEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class WayGoDatabase : RoomDatabase() {
@@ -262,6 +263,102 @@ abstract class WayGoDatabase : RoomDatabase() {
                     lastTireCheckMileage = 12000.0
                 )
             )
+
+            // Seed initial past ride history table records (destinations, dates, fares, drivers)
+            val initialPastRides = listOf(
+                PastRideHistoryEntity(
+                    id = "past_ride_101",
+                    pickupLocation = "Westfield Junction, Serrekunda",
+                    destination = "Senegambia Strip, Kololi",
+                    dateFormatted = "31 Aug 2026, 20:15",
+                    timestamp = System.currentTimeMillis() - 18 * 60 * 60 * 1000L,
+                    fareGmd = 250,
+                    driverName = "Alieu Ceesay",
+                    vehicleType = "CAR",
+                    vehiclePlate = "BJL 4821 C",
+                    paymentMethod = "WAVE",
+                    status = "COMPLETED",
+                    rating = 5.0f,
+                    distanceKm = 6.8,
+                    durationMinutes = 14,
+                    notes = "Evening trip to tourist strip, smooth AC ride",
+                    tipGmd = 30
+                ),
+                PastRideHistoryEntity(
+                    id = "past_ride_102",
+                    pickupLocation = "Kairaba Avenue, Fajara",
+                    destination = "Albert Market, Banjul",
+                    dateFormatted = "29 Aug 2026, 09:30",
+                    timestamp = System.currentTimeMillis() - 3 * 24 * 60 * 60 * 1000L,
+                    fareGmd = 350,
+                    driverName = "Mariama Jallow",
+                    vehicleType = "TRICYCLE",
+                    vehiclePlate = "KM 9312 T",
+                    paymentMethod = "CASH",
+                    status = "COMPLETED",
+                    rating = 4.9f,
+                    distanceKm = 11.2,
+                    durationMinutes = 24,
+                    notes = "Morning commute to downtown Banjul commercial district",
+                    tipGmd = 20
+                ),
+                PastRideHistoryEntity(
+                    id = "past_ride_103",
+                    pickupLocation = "Brusubi Turntable, West Coast",
+                    destination = "Banjul International Airport, Yundum",
+                    dateFormatted = "26 Aug 2026, 14:00",
+                    timestamp = System.currentTimeMillis() - 6 * 24 * 60 * 60 * 1000L,
+                    fareGmd = 450,
+                    driverName = "Bakary Touray",
+                    vehicleType = "CAR",
+                    vehiclePlate = "WCR 7431 B",
+                    paymentMethod = "QMONEY",
+                    status = "COMPLETED",
+                    rating = 5.0f,
+                    distanceKm = 14.5,
+                    durationMinutes = 22,
+                    notes = "Airport transfer with luggage assistance",
+                    tipGmd = 50
+                ),
+                PastRideHistoryEntity(
+                    id = "past_ride_104",
+                    pickupLocation = "Bakau Craft Market",
+                    destination = "Kotu Beach Resort",
+                    dateFormatted = "23 Aug 2026, 16:45",
+                    timestamp = System.currentTimeMillis() - 9 * 24 * 60 * 60 * 1000L,
+                    fareGmd = 150,
+                    driverName = "Ebrima Sanneh",
+                    vehicleType = "TRICYCLE",
+                    vehiclePlate = "BJL 1102 T",
+                    paymentMethod = "AFRIMONEY",
+                    status = "COMPLETED",
+                    rating = 4.7f,
+                    distanceKm = 4.2,
+                    durationMinutes = 10,
+                    notes = "Quick afternoon beach cruise",
+                    tipGmd = 15
+                ),
+                PastRideHistoryEntity(
+                    id = "past_ride_105",
+                    pickupLocation = "Tabokoto Highway",
+                    destination = "University of The Gambia, Kanifing",
+                    dateFormatted = "19 Aug 2026, 08:10",
+                    timestamp = System.currentTimeMillis() - 13 * 24 * 60 * 60 * 1000L,
+                    fareGmd = 180,
+                    driverName = "Alieu Ceesay",
+                    vehicleType = "CAR",
+                    vehiclePlate = "BJL 4821 C",
+                    paymentMethod = "WAVE",
+                    status = "COMPLETED",
+                    rating = 4.8f,
+                    distanceKm = 5.6,
+                    durationMinutes = 12,
+                    notes = "Campus commute for morning lectures",
+                    tipGmd = 0
+                )
+            )
+            dao.insertPastRides(initialPastRides)
         }
     }
 }
+

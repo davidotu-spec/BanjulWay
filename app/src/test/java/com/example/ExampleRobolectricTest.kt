@@ -5,12 +5,14 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.*
 import com.example.ui.WayGoViewModel
+import com.example.utils.LocationUtils
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -779,5 +781,187 @@ class ExampleRobolectricTest {
         assertEquals("APPROVED", driver?.approvalStatus)
         assertEquals(true, driver?.isOnline)
         assertEquals("TRICYCLE", driver?.vehicleType)
+    }
+
+    @Test
+    fun testDriverEtaCalculationFromGpsCoordinates() = runBlocking {
+        // Driver at Westfield Junction (13.4385, -16.6760)
+        // Passenger at Kairaba Avenue (13.4471, -16.6791)
+        val lat1 = 13.4385
+        val lng1 = -16.6760
+        val lat2 = 13.4471
+        val lng2 = -16.6791
+
+        val r = 6371.0 // Earth radius in km
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lng2 - lng1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        val distKm = r * c
+
+        // Assert distance is reasonable for Banjul/Kanifing metro zone (~1.0 km)
+        assert(distKm in 0.5..2.0)
+
+        // Estimated minutes (calibrated for Gambian urban transit)
+        val etaMin = (distKm * 3.5 + 1).toInt().coerceAtLeast(1)
+        assert(etaMin in 1..10)
+    }
+
+    @Test
+    fun testPastRideHistoryRoomDatabaseTableAndOperations() = runBlocking {
+        // 1. Verify initial state is empty in memory db
+        val initialRides = repository.allPastRidesFlow.first()
+        assertEquals(0, initialRides.size)
+
+        // 2. Insert sample past rides with destinations, dates, and vehicle info
+        val ride1 = PastRideHistoryEntity(
+            id = "ride_room_1",
+            pickupLocation = "Westfield Junction, Serrekunda",
+            destination = "Senegambia Strip, Kololi",
+            dateFormatted = "31 Aug 2026, 20:15",
+            timestamp = 1756671300000L,
+            fareGmd = 250,
+            driverName = "Alieu Ceesay",
+            vehicleType = "CAR",
+            vehiclePlate = "BJL 4821 C",
+            paymentMethod = "WAVE",
+            status = "COMPLETED",
+            rating = 5.0f,
+            distanceKm = 6.8,
+            durationMinutes = 14,
+            notes = "Night ride to Kololi",
+            tipGmd = 30
+        )
+        val ride2 = PastRideHistoryEntity(
+            id = "ride_room_2",
+            pickupLocation = "Kairaba Avenue, Fajara",
+            destination = "Albert Market, Banjul",
+            dateFormatted = "29 Aug 2026, 09:30",
+            timestamp = 1756455000000L,
+            fareGmd = 350,
+            driverName = "Mariama Jallow",
+            vehicleType = "TRICYCLE",
+            vehiclePlate = "KM 9312 T",
+            paymentMethod = "CASH",
+            status = "COMPLETED",
+            rating = 4.9f,
+            distanceKm = 11.2,
+            durationMinutes = 24,
+            notes = "Morning commute to Banjul port",
+            tipGmd = 20
+        )
+        val ride3 = PastRideHistoryEntity(
+            id = "ride_room_3",
+            pickupLocation = "Brusubi Turntable",
+            destination = "Banjul International Airport, Yundum",
+            dateFormatted = "26 Aug 2026, 14:00",
+            timestamp = 1756216800000L,
+            fareGmd = 450,
+            driverName = "Bakary Touray",
+            vehicleType = "CAR",
+            vehiclePlate = "WCR 7431 B",
+            paymentMethod = "QMONEY",
+            status = "COMPLETED",
+            rating = 5.0f,
+            distanceKm = 14.5,
+            durationMinutes = 22,
+            notes = "Airport transfer",
+            tipGmd = 50
+        )
+
+        repository.savePastRides(listOf(ride1, ride2, ride3))
+
+        // 3. Query all past rides flow
+        val allRides = repository.allPastRidesFlow.first()
+        assertEquals(3, allRides.size)
+        // Ordered by timestamp DESC
+        assertEquals("ride_room_1", allRides[0].id)
+        assertEquals("Senegambia Strip, Kololi", allRides[0].destination)
+        assertEquals("31 Aug 2026, 20:15", allRides[0].dateFormatted)
+
+        // 4. Test search query by destination
+        val searchAirport = repository.searchPastRidesFlow("Airport").first()
+        assertEquals(1, searchAirport.size)
+        assertEquals("Banjul International Airport, Yundum", searchAirport[0].destination)
+        assertEquals("26 Aug 2026, 14:00", searchAirport[0].dateFormatted)
+
+        val searchBanjul = repository.searchPastRidesFlow("Banjul").first()
+        assertEquals(2, searchBanjul.size)
+
+        // 5. Test single fetch by ID
+        val fetchedRide = repository.getPastRideById("ride_room_2")
+        assertNotNull(fetchedRide)
+        assertEquals("Albert Market, Banjul", fetchedRide?.destination)
+        assertEquals("Mariama Jallow", fetchedRide?.driverName)
+        assertEquals(350, fetchedRide?.fareGmd)
+
+        // 6. Test delete past ride
+        repository.deletePastRide("ride_room_2")
+        val afterDelete = repository.allPastRidesFlow.first()
+        assertEquals(2, afterDelete.size)
+        assertNull(repository.getPastRideById("ride_room_2"))
+
+        // 7. Test clear all
+        repository.clearAllPastRides()
+        val afterClear = repository.allPastRidesFlow.first()
+        assertEquals(0, afterClear.size)
+    }
+
+    @Test
+    fun testEstimatedFareCalculationBasedOnOriginAndDestinationDistance() {
+        // Origin: Westfield Junction, Serrekunda (13.4471, -16.6791)
+        val originLat = 13.4471
+        val originLng = -16.6791
+        // Destination: Senegambia Strip, Kololi (13.4455, -16.7180)
+        val destLat = 13.4455
+        val destLng = -16.7180
+
+        // 1. Calculate distance
+        val distKm = TripFareEstimationService.calculateDistanceKm(originLat, originLng, destLat, destLng)
+        assertTrue(distKm > 0.0)
+
+        // 2. Calculate estimated fare for CAR
+        val carEstimate = TripFareEstimationService.calculateEstimatedFare(
+            originLat = originLat,
+            originLng = originLng,
+            destLat = destLat,
+            destLng = destLng,
+            vehicleType = "CAR"
+        )
+        assertNotNull(carEstimate)
+        assertEquals("CAR", carEstimate.vehicleType)
+        assertTrue(carEstimate.finalFareGmd >= TripFareEstimationService.CAR_MIN_FARE)
+        assertTrue(carEstimate.distanceCharge > 0)
+        assertTrue(carEstimate.estimatedDurationMin > 0)
+
+        // 3. Calculate estimated fare for TRICYCLE (should be more affordable)
+        val trikeEstimate = TripFareEstimationService.calculateEstimatedFare(
+            originLat = originLat,
+            originLng = originLng,
+            destLat = destLat,
+            destLng = destLng,
+            vehicleType = "TRICYCLE"
+        )
+        assertNotNull(trikeEstimate)
+        assertEquals("TRICYCLE", trikeEstimate.vehicleType)
+        assertTrue(trikeEstimate.finalFareGmd < carEstimate.finalFareGmd)
+        assertTrue(trikeEstimate.finalFareGmd >= TripFareEstimationService.TRICYCLE_MIN_FARE)
+
+        // 4. Test calculateEstimatedFareByDistance helper directly
+        val fixed10KmCar = TripFareEstimationService.calculateEstimatedFareByDistance(10.0, "CAR")
+        val fixed10KmTrike = TripFareEstimationService.calculateEstimatedFareByDistance(10.0, "TRICYCLE")
+        assertTrue(fixed10KmCar.finalFareGmd > fixed10KmTrike.finalFareGmd)
+
+        // 5. Test LocationUtils convenience wrapper
+        val locUtilsEstimate = LocationUtils.calculateEstimatedFare(
+            currentLat = originLat,
+            currentLng = originLng,
+            destLat = destLat,
+            destLng = destLng,
+            vehicleType = "CAR"
+        )
+        assertEquals(carEstimate.finalFareGmd, locUtilsEstimate.finalFareGmd)
     }
 }
